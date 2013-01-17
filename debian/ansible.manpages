@@ -1,0 +1,4 @@
+docs/man/man1/ansible.1
+docs/man/man1/ansible-doc.1
+docs/man/man1/ansible-playbook.1
+docs/man/man1/ansible-pull.1
