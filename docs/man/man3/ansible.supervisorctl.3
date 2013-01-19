@@ -1,0 +1,37 @@
+.TH ANSIBLE.SUPERVISORCTL 3 "2012-12-23" "0.9" "ANSIBLE MODULES"
+." generated from library/supervisorctl
+.SH NAME
+supervisorctl \- Manage the state of a program or group of programs running via Supervisord
+." ------ DESCRIPTION
+.SH DESCRIPTION
+.PP
+Manage the state of a program or group of programs running via \fISupervisord\fR 
+." ------ OPTIONS
+."
+."
+.SH OPTIONS
+   
+.IP name
+The name of the \fIsupervisord\fR program/process to manage(required)   
+.IP state
+The state of service
+.IR Choices :
+started,stopped,restarted.(required)."
+."
+." ------ NOTES
+."
+."
+." ------ EXAMPLES
+.SH EXAMPLES
+.PP
+Manage the state of program \fImy_app\fR to be in \fIstarted\fR state.
+
+.nf
+supervisorctl: name=my_app state=started
+.fi
+." ------- AUTHOR
+.SH AUTHOR
+Matt Wright
+.SH SEE ALSO
+.IR ansible (1),
+.I http://ansible.github.com/modules.html#supervisorctl

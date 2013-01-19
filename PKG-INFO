@@ -1,0 +1,10 @@
+Metadata-Version: 1.0
+Name: ansible
+Version: 0.9
+Summary: Minimal SSH command and control
+Home-page: http://ansible.github.com/
+Author: Michael DeHaan
+Author-email: michael.dehaan@gmail.com
+License: GPLv3
+Description: UNKNOWN
+Platform: UNKNOWN

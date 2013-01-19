@@ -1,0 +1,51 @@
+.TH ANSIBLE.SELINUX 3 "2012-12-23" "0.9" "ANSIBLE MODULES"
+." generated from library/selinux
+.SH NAME
+selinux \- Change policy and state of SELinux
+." ------ DESCRIPTION
+.SH DESCRIPTION
+.PP
+Configures the SELinux mode and policy. A reboot may be required after usage. Ansible will not issue this reboot but will let you know when it is required. 
+." ------ OPTIONS
+."
+."
+.SH OPTIONS
+   
+.IP conf
+path to the SELinux configuration file, if non-standard (default: /etc/selinux/config)   
+.IP policy
+name of the SELinux policy to use (example: \fCtargeted\fR) will be required if state is not \fCdisabled\fR   
+.IP state
+The SELinux mode
+.IR Choices :
+enforcing,permissive,disabled.(required)."
+."
+." ------ NOTES
+.SH NOTES
+.PP
+Not tested on any debian based system 
+."
+."
+." ------ EXAMPLES
+.SH EXAMPLES
+.PP
+
+.nf
+selinux: policy=targeted state=enforcing
+.fi
+.PP
+
+.nf
+selinux: policy=targeted state=permissive
+.fi
+.PP
+
+.nf
+selinux: state=disabled
+.fi
+." ------- AUTHOR
+.SH AUTHOR
+Derek Carter <goozbach@friocorte.com>
+.SH SEE ALSO
+.IR ansible (1),
+.I http://ansible.github.com/modules.html#selinux

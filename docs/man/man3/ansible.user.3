@@ -1,0 +1,101 @@
+.TH ANSIBLE.USER 3 "2012-12-23" "0.9" "ANSIBLE MODULES"
+." generated from library/user
+.SH NAME
+user \- Manage user accounts
+." ------ DESCRIPTION
+.SH DESCRIPTION
+.PP
+Manage user accounts and user attributes. 
+." ------ OPTIONS
+."
+."
+.SH OPTIONS
+   
+.IP append
+If \fCyes\fR, will only add groups, not set them to just the list in \fIgroups\fR.   
+.IP comment
+Optionally sets the description (aka \fIGECOS\fR) of user account.   
+.IP createhome
+Unless set to \fCno\fR, a home directory will be made for the user when the account is created.
+.IR Choices :
+True,False. (default: yes)   
+.IP force
+When used with \fCstate=absent\fR, behavior is as with \fCuserdel --force\fR.
+.IR Choices :
+True,False. (default: no)   
+.IP generate_ssh_key
+Whether to generate a SSH key for the user in question. This will \fBnot\fR overwrite an existing SSH key.
+.IR Choices :
+True,False. (default: no)(Added in Ansible version 0.9.)
+   
+.IP group
+Optionally sets the user's primary group (takes a group name).   
+.IP groups
+Puts the user in this comma-delimited list of groups.   
+.IP home
+Optionally set the user's home directory.   
+.IP name
+Name of the user to create, remove or modify.(required)   
+.IP password
+Optionally set the user's password to this crypted value.  See the user example in the github examples directory for what this looks like in a playbook.   
+.IP remove
+When used with \fCstate=absent\fR, behavior is as with \fCuserdel --remove\fR.
+.IR Choices :
+True,False. (default: no)   
+.IP shell
+Optionally set the user's shell.   
+.IP ssh_key_bits
+Optionally specify number of bits in SSH key to create. (default: 2048)(Added in Ansible version 0.9.)
+   
+.IP ssh_key_comment
+Optionally define the comment for the SSH key. (default: ansible-generated)(Added in Ansible version 0.9.)
+   
+.IP ssh_key_file
+Optionally specify the SSH key filename. (default: $HOME/.ssh/id_rsa)(Added in Ansible version 0.9.)
+   
+.IP ssh_key_passphrase
+Set a passphrase for the SSH key.  If no passphrase is provided, the SSH key will default to having no passphrase.(Added in Ansible version 0.9.)
+   
+.IP ssh_key_type
+Optionally specify the type of SSH key to generate. Available SSH key types will depend on implementation present on target host. (default: rsa)(Added in Ansible version 0.9.)
+   
+.IP state
+Whether the account should exist.  When \fCabsent\fR, removes the user account.
+.IR Choices :
+present,absent. (default: present)   
+.IP system
+When creating an account, setting this to \fCyes\fR makes the user a system account.  This setting cannot be changed on existing users.
+.IR Choices :
+True,False. (default: no)   
+.IP uid
+Optionally sets the \fIUID\fR of the user.."
+."
+." ------ NOTES
+."
+."
+." ------ EXAMPLES
+.SH EXAMPLES
+.PP
+Add the user 'johnd' with a specific uid and a primary group of 'admin'
+
+.nf
+user: name=johnd comment="John Doe" uid=1040
+.fi
+.PP
+Remove the user 'johnd'
+
+.nf
+user: name=johnd state=absent remove=yes
+.fi
+.PP
+Create a 2048-bit SSH key for user jsmith
+
+.nf
+user: name=jsmith generate_ssh_key=yes ssh_key_bits=2048
+.fi
+." ------- AUTHOR
+.SH AUTHOR
+Stephen Fromm
+.SH SEE ALSO
+.IR ansible (1),
+.I http://ansible.github.com/modules.html#user

@@ -1,0 +1,54 @@
+.TH ANSIBLE.FIREBALL 3 "2012-12-23" "0.9" "ANSIBLE MODULES"
+." generated from library/fireball
+.SH NAME
+fireball \- Enable fireball mode on remote node
+." ------ DESCRIPTION
+.SH DESCRIPTION
+.PP
+This modules launches an ephemeral \fIfireball\fR ZeroMQ message bus daemon on the remote node which Ansible can use to communicate with nodes at high speed. 
+.PP
+The daemon listens on a configurable port for a configurable amount of time. 
+.PP
+Starting a new fireball as a given user terminates any existing user fireballs. 
+.PP
+Fireball mode is AES encrypted 
+." ------ OPTIONS
+."
+."
+.SH OPTIONS
+   
+.IP minutes
+The \fIfireball\fR listener daemon is started on nodes and will stay around for this number of minutes before turning itself off. (default: 30)   
+.IP port
+TCP port for ZeroMQ (default: 5099)."
+."
+." ------ NOTES
+.SH NOTES
+.PP
+See the advanced playbooks chapter for more about using fireball mode. 
+."
+."
+." ------ EXAMPLES
+.SH EXAMPLES
+.PP
+This example playbook has two plays: the first launches \fIfireball\fR mode on all hosts via SSH, and the second actually starts using \fIfireball\fR node for subsequent management over the fireball interface
+
+.nf
+- hosts: devservers
+      gather_facts: false
+      connection: ssh
+      sudo: yes
+      tasks:
+          - action: fireball
+- hosts: devservers
+      connection: fireball
+      tasks:
+          - command: /usr/bin/anything
+
+.fi
+." ------- AUTHOR
+.SH AUTHOR
+Michael DeHaan
+.SH SEE ALSO
+.IR ansible (1),
+.I http://ansible.github.com/modules.html#fireball

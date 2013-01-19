@@ -1,0 +1,41 @@
+.TH ANSIBLE.ASSEMBLE 3 "2012-12-23" "0.9" "ANSIBLE MODULES"
+." generated from library/assemble
+.SH NAME
+assemble \- Assembles a configuration file from fragments
+." ------ DESCRIPTION
+.SH DESCRIPTION
+.PP
+Assembles a configuration file from fragments. Often a particular program will take a single configuration file and does not support a \fCconf.d\fR style structure where it is easy to build up the configuration from multiple sources. \fIassemble\fR will take a directory of files that have already been transferred to the system, and concatenate them together to produce a destination file. Files are assembled in string sorting order. Puppet calls this idea \fIfragments\fR. 
+." ------ OPTIONS
+."
+."
+.SH OPTIONS
+   
+.IP backup
+Create a backup file (if \fCyes\fR), including the timestamp information so you can get the original file back if you somehow clobbered it incorrectly.
+.IR Choices :
+yes,no. (default: no)   
+.IP dest
+A file to create using the concatenation of all of the source files.(required)   
+.IP others
+all arguments accepted by the \fIfile\fR module also work here   
+.IP src
+An already existing directory full of source files.(required)."
+."
+." ------ NOTES
+."
+."
+." ------ EXAMPLES
+.SH EXAMPLES
+.PP
+Example from Ansible Playbooks
+
+.nf
+assemble: src=/etc/someapp/fragments dest=/etc/someapp/someapp.conf
+.fi
+." ------- AUTHOR
+.SH AUTHOR
+Stephen Fromm
+.SH SEE ALSO
+.IR ansible (1),
+.I http://ansible.github.com/modules.html#assemble

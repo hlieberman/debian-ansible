@@ -1,0 +1,30 @@
+.TH ANSIBLE.OHAI 3 "2012-12-23" "0.9" "ANSIBLE MODULES"
+." generated from library/ohai
+.SH NAME
+ohai \- Returns inventory data from I(Ohai)
+." ------ DESCRIPTION
+.SH DESCRIPTION
+.PP
+Similar to the \fIfacter\fR module, this runs the \fIOhai\fR discovery program (\fIhttp://wiki.opscode.com/display/chef/Ohai\fR) on the remote host and returns JSON inventory data. \fIOhai\fR data is a bit more verbose and nested than \fIfacter\fR. 
+." ------ OPTIONS
+."
+."
+."
+."
+." ------ NOTES
+."
+."
+." ------ EXAMPLES
+.SH EXAMPLES
+.PP
+Retrieve \fIohai\fR data from all Web servers and store in one-file per host
+
+.nf
+ansible webservers -m ohai --tree=/tmp/ohaidata
+.fi
+." ------- AUTHOR
+.SH AUTHOR
+Michael DeHaan
+.SH SEE ALSO
+.IR ansible (1),
+.I http://ansible.github.com/modules.html#ohai

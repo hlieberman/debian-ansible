@@ -1,0 +1,41 @@
+.TH ANSIBLE.DEBUG 3 "2012-12-23" "0.9" "ANSIBLE MODULES"
+." generated from library/debug
+.SH NAME
+debug \- Print statements during execution
+." ------ DESCRIPTION
+.SH DESCRIPTION
+.PP
+This module prints statements during execution and can be useful for debugging variables or expressions without necessarily halting the playbook. Useful for debugging together with the only_if directive.
+In order to see the debug message, you need to run ansible in verbose mode (using the \fC-v\fR option). 
+." ------ OPTIONS
+."
+."
+.SH OPTIONS
+   
+.IP fail
+A boolean that indicates whether the debug module should fail or not. (default: no)   
+.IP msg
+The customized message that is printed. If omitted, prints a generic message. (default: Hello world!)."
+."
+." ------ NOTES
+."
+."
+." ------ EXAMPLES
+.SH EXAMPLES
+.PP
+Example that prints the loopback address and gateway for each host
+
+.nf
+- action: debug msg="System $inventory_hostname has uuid $ansible_product_uuid"
+- action: debug msg="System $inventory_hostname lacks a gateway" fail=yes
+  only_if: "is_unset('${ansible_default_ipv4.gateway}')"
+- action: debug msg="System $inventory_hostname has gateway ${ansible_default_ipv4.gateway}"
+  only_if: "is_set('${ansible_default_ipv4.gateway}')"
+
+.fi
+." ------- AUTHOR
+.SH AUTHOR
+Dag Wieers
+.SH SEE ALSO
+.IR ansible (1),
+.I http://ansible.github.com/modules.html#debug

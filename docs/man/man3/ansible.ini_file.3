@@ -1,0 +1,60 @@
+.TH ANSIBLE.INI_FILE 3 "2012-12-23" "0.9" "ANSIBLE MODULES"
+." generated from library/ini_file
+.SH NAME
+ini_file \- Tweak settings in INI files
+." ------ DESCRIPTION
+.SH DESCRIPTION
+.PP
+Manage (add, remove, change) individual settings in an INI-style file without having to manage the file as a whole with, say, \fItemplate\fR or \fIassemble\fR. Adds missing sections if they don't exist. 
+." ------ OPTIONS
+."
+."
+.SH OPTIONS
+   
+.IP backup
+Create a backup file including the timestamp information so you can get the original file back if you somehow clobbered it incorrectly.
+.IR Choices :
+yes,no.   
+.IP dest
+Path to the INI-style file; this file is created if required(required)   
+.IP option
+if set (required for changing a \fIvalue\fR), this is the name of the option.May be omitted if adding/removing a whole \fIsection\fR.   
+.IP others
+all arguments accepted by the \fIfile\fR module also work here   
+.IP section
+Section name in INI file. This is added if \fCstate=present\fR automatically when a single value is being set.(required)   
+.IP value
+the string value to be associated with an \fIoption\fR. May be omitted when removing an \fIoption\fR.."
+."
+." ------ NOTES
+.SH NOTES
+.PP
+While it is possible to add an \fIoption\fR without specifying a \fIvalue\fR, this makes no sense. 
+.PP
+A section named \fCdefault\fR cannot be added by the module, but if it exists, individual options within the section can be updated. (This is a limitation of Python's \fIConfigParser\fR.) Either use \fItemplate\fR to create a base INI file with a \fC[default]\fR section, or use \fIlineinfile\fR to add the missing line. 
+."
+."
+." ------ EXAMPLES
+.SH EXAMPLES
+.PP
+Ensure \fCfav=lemonade\fR is in section \fC[drinks]\fR in said file
+
+.nf
+ini_file: dest=/etc/conf section=drinks option=fav value=lemonade mode=0600 backup=yes
+.fi
+.PP
+
+.nf
+ini_file: dest=/etc/anotherconf
+          section=drinks
+          option=temperature
+          value=cold
+          backup=yes
+
+.fi
+." ------- AUTHOR
+.SH AUTHOR
+Jan-Piet Mens
+.SH SEE ALSO
+.IR ansible (1),
+.I http://ansible.github.com/modules.html#ini-file

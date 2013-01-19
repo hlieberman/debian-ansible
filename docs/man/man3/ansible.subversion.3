@@ -1,0 +1,42 @@
+.TH ANSIBLE.SUBVERSION 3 "2012-12-23" "0.9" "ANSIBLE MODULES"
+." generated from library/subversion
+.SH NAME
+subversion \- Deploys a subversion repository.
+." ------ DESCRIPTION
+.SH DESCRIPTION
+.PP
+This module is really simple, it checks out from the given branch of a repo or at a particular tag. 
+." ------ OPTIONS
+."
+."
+.SH OPTIONS
+   
+.IP dest
+Absolute path where the repository should be deployed.(required)   
+.IP force
+If \fCyes\fR, any modified files in the working repository will be discarded. If \fCno\fR, this module will fail if it encounters modified files.
+.IR Choices :
+yes,no. (default: True)   
+.IP repo
+The subversion URL to the repository.(required)."
+."
+." ------ NOTES
+.SH NOTES
+.PP
+Requires \fIsubversion\fR and \fIgrep\fR on the client. 
+."
+."
+." ------ EXAMPLES
+.SH EXAMPLES
+.PP
+Export subversion repository in a specified folder
+
+.nf
+subversion: repo=svn+ssh://an.example.org/path/to/repo dest=/src/checkout
+.fi
+." ------- AUTHOR
+.SH AUTHOR
+Dane Summers
+.SH SEE ALSO
+.IR ansible (1),
+.I http://ansible.github.com/modules.html#subversion

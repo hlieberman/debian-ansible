@@ -1,0 +1,55 @@
+.TH ANSIBLE.COMMAND 3 "2012-12-23" "0.9" "ANSIBLE MODULES"
+." generated from library/command
+.SH NAME
+command \- Executes a command on a remote node
+." ------ DESCRIPTION
+.SH DESCRIPTION
+.PP
+The \fIcommand\fR module takes the command name followed by a list of space-delimited arguments. 
+.PP
+The given command will be executed on all selected nodes. It will not be processed through the shell, so variables like \fC$HOME\fR and operations like \fC"<"\fR, \fC">"\fR, \fC"|"\fR, and \fC"&"\fR will not work. As such, all paths to commands must be fully qualified 
+." ------ OPTIONS
+."
+."
+.SH OPTIONS
+   
+.IP chdir
+cd into this directory before running the command(Added in Ansible version 0.6.)
+   
+.IP creates
+a filename, when it already exists, this step will \fBnot\fR be run.   
+.IP executable
+change the shell used to execute the command. Should be an absolute path to the executable.(Added in Ansible version 0.9.)
+   
+.IP free_form
+the command module takes a free form command to run(required)   
+.IP removes
+a filename, when it does not exist, this step will \fBnot\fR be run.(Added in Ansible version 0.8.)
+."
+."
+." ------ NOTES
+.SH NOTES
+.PP
+If you want to run a command through the shell (say you are using \fC<\fR, \fC>\fR, \fC|\fR, etc), you actually want the \fIshell\fR module instead. The \fIcommand\fR module is much more secure as it's not affected by the user's environment. 
+."
+."
+." ------ EXAMPLES
+.SH EXAMPLES
+.PP
+Example from Ansible Playbooks
+
+.nf
+command: /sbin/shutdown -t now
+.fi
+.PP
+\fCcreates\fR, \fCremoves\fR, and \fCchdir\fR can be specified after the command. For instance, if you only want to run a command if a certain file does not exist, use this.
+
+.nf
+command: /usr/bin/make_database.sh arg1 arg2 creates=/path/to/database
+.fi
+." ------- AUTHOR
+.SH AUTHOR
+Michael DeHaan
+.SH SEE ALSO
+.IR ansible (1),
+.I http://ansible.github.com/modules.html#command

@@ -1,0 +1,46 @@
+.TH ANSIBLE.TEMPLATE 3 "2012-12-23" "0.9" "ANSIBLE MODULES"
+." generated from library/template
+.SH NAME
+template \- Templates a file out to a remote server.
+." ------ DESCRIPTION
+.SH DESCRIPTION
+.PP
+Templates are processed by the Jinja2 templating language (\fIhttp://jinja.pocoo.org/docs/\fR) - documentation on the template formatting can be found in the Template Designer Documentation (\fIhttp://jinja.pocoo.org/docs/templates/\fR). 
+.PP
+Four additional variables can be used in templates: \fCansible_managed\fR (configurable via the \fCdefaults\fR section of \fCansible.cfg\fR) contains a string which can be used to describe the template name, host, modification time of the template file and the owner uid, \fCtemplate_host\fR contains the node name of the template's machine, \fCtemplate_uid\fR the owner, and \fCtemplate_path\fR the file name. 
+." ------ OPTIONS
+."
+."
+.SH OPTIONS
+   
+.IP backup
+Create a backup file including the timestamp information so you can get the original file back if you somehow clobbered it incorrectly.
+.IR Choices :
+yes,no. (default: no)   
+.IP dest
+Location to render the template to on the remote machine.(required)   
+.IP others
+all arguments accepted by the \fIfile\fR module also work here   
+.IP src
+Path of a Jinja2 formatted template on the local server. This can be a relative or absolute path.(required)."
+."
+." ------ NOTES
+.SH NOTES
+.PP
+Since Ansible version 0.9, templates are loaded with \fCtrim_blocks=True\fR. 
+."
+."
+." ------ EXAMPLES
+.SH EXAMPLES
+.PP
+Example from Ansible Playbooks
+
+.nf
+template: src=/mytemplates/foo.j2 dest=/etc/file.conf owner=bin group=wheel mode=0644
+.fi
+." ------- AUTHOR
+.SH AUTHOR
+Michael DeHaan
+.SH SEE ALSO
+.IR ansible (1),
+.I http://ansible.github.com/modules.html#template
