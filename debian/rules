@@ -7,6 +7,16 @@ override_dh_fixperms:
 	chmod +x `grep '^#!' debian/ansible/usr/share/ansible/* -n | grep ':1:' | cut -d: -f 1`
 	dh_fixperms
 
+override_dh_auto_build:
+	dh_auto_build
+	cp -a docsite html
+	PYTHONPATH=../lib make docs -C html
+	rm html/.gitignore
+
+override_dh_auto_clean:
+	rm -rf html
+	dh_auto_clean
+
 DEB_UPSTREAM_VERSION=$(shell dpkg-parsechangelog | sed -rne 's,^Version: ([^+]+).*,\1,p')
 get-orig-source:
 	uscan --noconf --force-download --rename --download-current-version --destdir=.

@@ -2,7 +2,8 @@ Source: ansible
 Section: admin
 Priority: optional
 Maintainer: Janos Guljas <janos@debian.org>
-Build-Depends: debhelper (>= 9), python-all, python-setuptools
+Build-Depends: debhelper (>= 9), python-all, python-setuptools,
+ python-sphinx, python-yaml
 Standards-Version: 3.9.4
 Homepage: http://ansible.cc
 Vcs-Git: git://anonscm.debian.org/collab-maint/ansible.git
@@ -53,4 +54,17 @@ Description: Ansible fireball transport support for nodes
  .
  This package is a dependency package, which depends on Python modules for
  keyczar and ZeroMQ.
+
+Package: ansible-doc
+Architecture: all
+Section: doc
+Depends: ${misc:Depends}, libjs-jquery, libjs-underscore
+Description: Ansible documentation and examples
+ Ansible is a radically simple model-driven configuration management,
+ multi-node deployment, and remote task execution system. Ansible works
+ over SSH and does not require any software or daemons to be installed
+ on remote nodes. Extension modules can be written in any language and
+ are transferred to managed machines automatically.
+ .
+ This package contains HTML documentation and examples.
 
