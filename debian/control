@@ -13,7 +13,6 @@ Package: ansible
 Architecture: all
 Depends: ${misc:Depends}, ${python:Depends}, python-yaml, python-paramiko,
  python-jinja2
-Provides: ${python:Provides}
 Description: Configuration management, deployment, and task execution system
  Ansible is a radically simple model-driven configuration management,
  multi-node deployment, and remote task execution system. Ansible works
