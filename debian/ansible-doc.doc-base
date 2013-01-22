@@ -12,3 +12,4 @@ Section: Programming/Python
 Format: HTML
 Index: /usr/share/doc/ansible-doc/html/index.html
 Files: /usr/share/doc/ansible-doc/html/*.html
+ /usr/share/doc/ansible-doc/html/man/*.html
