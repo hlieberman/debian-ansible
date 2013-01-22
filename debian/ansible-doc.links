@@ -1,6 +1,2 @@
 /usr/share/javascript/jquery/jquery.js usr/share/doc/ansible-doc/html/_static/jquery.js
 /usr/share/javascript/underscore/underscore.js usr/share/doc/ansible-doc/html/_static/underscore.js
-usr/share/doc/ansible-doc/html/_static/bootstrap.css usr/share/doc/ansible-doc/html/_themes/bootstrap/static/bootstrap.css
-usr/share/doc/ansible-doc/html/_static/bootstrap-dropdown.js usr/share/doc/ansible-doc/html/_themes/bootstrap/static/bootstrap-dropdown.js
-usr/share/doc/ansible-doc/html/_static/bootstrap-scrollspy.js usr/share/doc/ansible-doc/html/_themes/bootstrap/static/bootstrap-scrollspy.js
-usr/share/doc/ansible-doc/html/_images/ansible_arch.png usr/share/doc/ansible-doc/html/ansible_arch.png

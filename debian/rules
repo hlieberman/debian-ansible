@@ -12,7 +12,14 @@ override_dh_auto_build:
 	cp -a docsite html
 	cp debian/missing-files/ansible_arch.png html
 	PYTHONPATH=../lib make docs -C html
-	rm html/.gitignore
+	rm -rf html/.gitignore \
+	    html/_themes \
+	    html/rst \
+	    html/*.png \
+	    html/*.jpg \
+	    html/*.py \
+	    html/Makefile \
+	    html/.buildinfo
 
 override_dh_auto_clean:
 	rm -rf html
