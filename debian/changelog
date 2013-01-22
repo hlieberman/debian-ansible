@@ -1,4 +1,4 @@
-ansible (0.9-1) UNRELEASED; urgency=low
+ansible (0.9+dfsg-1) UNRELEASED; urgency=low
 
   * Initial release. (Closes: #698428)
 
