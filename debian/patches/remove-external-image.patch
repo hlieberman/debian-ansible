@@ -1,0 +1,18 @@
+Description: Remove the link to the external image
+ The link to ansible_arch.png is on an external location and may not be
+ accessible. This image is not in the source package. The image is copied in
+ build time from debian/missing-files directory.
+Author: Janos Guljas <janos@debian.org>
+Last-Update: 2013-01-22
+
+--- a/docsite/rst/index.rst
++++ b/docsite/rst/index.rst
+@@ -21,7 +21,7 @@ what sort of modules are available in An
+ Overview
+ ````````
+ 
+-.. image:: http://ansible.cc/img/ansible_arch.png
++.. image:: ../ansible_arch.png
+    :alt: ansible architecture diagram  
+    :width: 566px
+    :height: 439px

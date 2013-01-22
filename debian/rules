@@ -10,6 +10,7 @@ override_dh_fixperms:
 override_dh_auto_build:
 	dh_auto_build
 	cp -a docsite html
+	cp debian/missing-files/ansible_arch.png html
 	PYTHONPATH=../lib make docs -C html
 	rm html/.gitignore
 

@@ -1,0 +1,31 @@
+Description: Remove JavaScript code that calls external Google Analytics service
+ This code is used for tracking user's activity by the third-party service.
+Author: Janos Guljas <janos@debian.org>
+Last-Update: 2013-01-22
+
+--- a/docsite/_themes/bootstrap/layout.html
++++ b/docsite/_themes/bootstrap/layout.html
+@@ -82,23 +82,6 @@
+ }());
+ </script>
+ 
+-<script type="text/javascript">
+-
+- var _gaq = _gaq || [];
+- _gaq.push(['_setAccount', 'UA-29861888-1']);
+- _gaq.push(['_trackPageview']);
+-
+- (function() {
+-   var ga = document.createElement('script'); ga.type =
+-'text/javascript'; ga.async = true;
+-   ga.src = ('https:' == document.location.protocol ? 'https://ssl' :
+-'http://www') + '.google-analytics.com/ga.js';
+-   var s = document.getElementsByTagName('script')[0];
+-s.parentNode.insertBefore(ga, s);
+- })();
+-
+-</script>
+-
+ {% endblock %}
+ 
+ {% block header %}{{ navBar() }}{% endblock %}
