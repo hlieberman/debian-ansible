@@ -1,11 +1,96 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: ansible
 Upstream-Contact: Michael DeHaan <michael.dehaan@gmail.com>
-Source: http://pypi.python.org/pypi/ansible
+Source: https://github.com/ansible/ansible/
 
 Files: *
 Copyright: 2012, Michael DeHaan <michael.dehaan@gmail.com>
 License: GPL-3+
+
+Files: docs/man/man1/ansible-doc.1
+ docs/man/man1/ansible-doc.1.asciidoc.in
+Copyright: 2012, Jan-Piet Mens
+License: GPL-3+
+
+Files: docsite/_themes/bootstrap/static/bootstrap-scrollspy.js
+ docsite/_themes/bootstrap/static/bootstrap-dropdown.js
+ docsite/_themes/bootstrap/static/bootstrap.css
+ docsite/_static/bootstrap-scrollspy.js
+ docsite/_static/bootstrap-dropdown.js
+ docsite/_static/bootstrap.css
+Copyright: 2011, Twitter, Inc.
+License: Apache-2.0
+
+Files: docsite/_static/sidebar.js
+ docsite/_static/searchtools.js
+ docsite/_static/default.css
+ docsite/_static/doctools.js
+ docsite/_static/basic.css
+Copyright: 2007-2011 by the Sphinx team
+License: BSD
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions are
+ met:
+ .
+ * Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+ .
+ * Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Files: lib/ansible/color.py
+Copyright: 2008, Brian Nez <thedude at bri1 dot com>
+License: GPL-3+
+
+Files: lib/ansible/runner/action_plugins/add_host.py
+Copyright: 2012, Seth Vidal <skvidal@fedoraproject.org>
+License: GPL-3+
+
+Files: lib/ansible/runner/action_plugins/fail.py
+ lib/ansible/runner/action_plugins/debug.py
+ library/debug
+ library/mail
+ library/fail
+ plugins/callbacks/mail.py
+Copyright: 2012, Dag Wieers <dag@wieers.com>
+License: GPL-3+
+
+Files: lib/ansible/runner/action_plugins/group_by.py
+ plugins/inventory/yaml.py
+Copyright: 2012, Jeroen Hoekx <jeroen@hoekx.be>
+License: GPL-3+
+
+Files: lib/ansible/runner/action_plugins/pause.py
+Copyright: 2012, Tim Bielawa <tbielawa@redhat.com>
+License: GPL-3+
+
+Files: library/virt
+Copyright: 2007, 2012 Red Hat, Inc
+ Michael DeHaan <michael.dehaan@gmail.com>
+ Seth Vidal <skvidal@fedoraproject.org>
+License: GPL-3+
+
+Files: library/nagios
+Copyright: 2011, Red Hat, Inc.
+ Tim Bielawa <tbielawa@redhat.com>
+License: GPL-2
+
+Files: packaging/debian/*
+Copyright: Henry Graham (hzgraham) <Henry.Graham@mail.wvu.edu>
+License: GPL-2
 
 Files: debian/*
 Copyright: 2013 Janos Guljas <janos@debian.org>
@@ -28,3 +113,12 @@ License: GPL-3+
  On Debian systems, the full text of the GNU General Public
  License version 3 can be found in the file
  `/usr/share/common-licenses/GPL-3'.
+
+License: GPL-2
+ On Debian systems, the full text of the GNU General Public
+ License version 2 can be found in the file
+ `/usr/share/common-licenses/GPL-2'.
+
+License: Apache-2.0
+ On Debian systems, the full text of the Apache License Version 2.0 can be
+ found in the file `/usr/share/common-licenses/Apache-2.0'.
