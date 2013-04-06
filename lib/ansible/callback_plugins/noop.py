@@ -1,4 +1,4 @@
-# (C) 2012, Michael DeHaan, <michael.dehaan@gmail.com>
+# (C) 2012-2013, Michael DeHaan, <michael.dehaan@gmail.com>
 
 # This file is part of Ansible
 #
@@ -72,7 +72,7 @@ class CallbackModule(object):
     def playbook_on_task_start(self, name, is_conditional):
         pass
 
-    def playbook_on_vars_prompt(self, varname, private=True, prompt=None, encrypt=None, confirm=False, salt_size=None, salt=None):
+    def playbook_on_vars_prompt(self, varname, private=True, prompt=None, encrypt=None, confirm=False, salt_size=None, salt=None, default=None):
         pass
 
     def playbook_on_setup(self):

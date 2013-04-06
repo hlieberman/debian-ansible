@@ -30,8 +30,7 @@ import time
 import datetime
 import subprocess
 import ansible.utils
-from ansible.utils import module_docs
-
+import ansible.utils.module_docs as module_docs
 
 # Get parent directory of the directory this script lives in
 MODULEDIR=os.path.abspath(os.path.join(
@@ -128,7 +127,7 @@ def load_examples_section(text):
 def return_data(text, options, outputname, module):
     if options.output_dir is not None:
         f = open(os.path.join(options.output_dir, outputname % module), 'w')
-        f.write(text)
+        f.write(text.encode('utf-8'))
         f.close()
     else:
         print text
@@ -165,7 +164,7 @@ def main():
     p.add_option("-t", "--type",
             action='store',
             dest='type',
-            choices=['html', 'latex', 'man', 'rst', 'json', 'markdown'],
+            choices=['html', 'latex', 'man', 'rst', 'json', 'markdown', 'js'],
             default='latex',
             help="Output type")
     p.add_option("-m", "--module",
@@ -297,7 +296,7 @@ def main():
                 js_data.append(j)
             continue
 
-        doc = ansible.utils.module_docs.get_docstring(fname, verbose=options.verbose)
+        doc, examples = ansible.utils.module_docs.get_docstring(fname, verbose=options.verbose)
 
         if doc is None and module not in ansible.utils.module_docs.BLACKLIST_MODULES:
             sys.stderr.write("*** ERROR: CORE MODULE MISSING DOCUMENTATION: %s ***\n" % module)
@@ -315,6 +314,7 @@ def main():
             doc['docuri']           = doc['module'].replace('_', '-')
             doc['now_date']         = datetime.date.today().strftime('%Y-%m-%d')
             doc['ansible_version']  = options.ansible_version
+            doc['plainexamples']    = examples  #plain text
 
             if options.includes_file is not None and includefmt != "":
                 incfile.write(includefmt % module)

@@ -19,6 +19,7 @@ import os
 import glob
 from ansible import errors
 from ansible import utils
+import ansible.constants as C
 
 class VarsModule(object):
 
@@ -41,22 +42,29 @@ class VarsModule(object):
 
         results = {}
 
-        # load vars in playbook_dir/group_vars/name_of_group
+        # load vars in inventory_dir/group_vars/name_of_group
         for x in groups:
             path = os.path.join(basedir, "group_vars/%s" % x)
             if os.path.exists(path):
                 data = utils.parse_yaml_from_file(path)
                 if type(data) != dict:
                     raise errors.AnsibleError("%s must be stored as a dictionary/hash" % path)
-                results.update(data)
+                if C.DEFAULT_HASH_BEHAVIOUR == "merge":
+                    # let data content override results if needed
+                    results = utils.merge_hash(results, data)
+                else:
+                    results.update(data)
 
-        # load vars in playbook_dir/group_vars/name_of_host
+        # load vars in inventory_dir/hosts_vars/name_of_host
         path = os.path.join(basedir, "host_vars/%s" % host.name)
         if os.path.exists(path):
             data = utils.parse_yaml_from_file(path)
             if type(data) != dict:
                 raise errors.AnsibleError("%s must be stored as a dictionary/hash" % path)
-            results.update(data)
-
+            if C.DEFAULT_HASH_BEHAVIOUR == "merge":
+                # let data content override results if needed
+                results = utils.merge_hash(results, data)
+            else:
+                results.update(data)
         return results
 

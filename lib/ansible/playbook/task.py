@@ -1,4 +1,4 @@
-# (c) 2012, Michael DeHaan <michael.dehaan@gmail.com>
+# (c) 2012-2013, Michael DeHaan <michael.dehaan@gmail.com>
 #
 # This file is part of Ansible
 #
@@ -27,7 +27,7 @@ class Task(object):
         'play', 'notified_by', 'tags', 'register',
         'delegate_to', 'first_available_file', 'ignore_errors',
         'local_action', 'transport', 'sudo', 'sudo_user', 'sudo_pass',
-        'items_lookup_plugin', 'items_lookup_terms'
+        'items_lookup_plugin', 'items_lookup_terms', 'environment', 'args'
     ]
 
     # to prevent typos and such
@@ -35,10 +35,10 @@ class Task(object):
          'name', 'action', 'only_if', 'async', 'poll', 'notify',
          'first_available_file', 'include', 'tags', 'register', 'ignore_errors',
          'delegate_to', 'local_action', 'transport', 'sudo', 'sudo_user',
-         'sudo_pass', 'when'
+         'sudo_pass', 'when', 'connection', 'environment', 'args'
     ]
 
-    def __init__(self, play, ds, module_vars=None):
+    def __init__(self, play, ds, module_vars=None, additional_conditions=None):
         ''' constructor loads from a task or handler datastructure '''
 
         for x in ds.keys():
@@ -47,6 +47,15 @@ class Task(object):
             if x in utils.plugins.module_finder:
                 if 'action' in ds:
                     raise errors.AnsibleError("multiple actions specified in task %s" % (ds.get('name', ds['action'])))
+                if isinstance(ds[x], dict):
+                    if 'args' in ds:
+                        raise errors.AnsibleError("can't combine args: and a dict for %s: in task %s" % (x, ds.get('name', "%s: %s" % (x, ds[x]))))
+                    ds['args'] = ds[x]
+                    ds[x] = ''
+                elif ds[x] is None:
+                    ds[x] = ''
+                if not isinstance(ds[x], basestring):
+                    raise errors.AnsibleError("action specified for task %s has invalid type %s" % (ds.get('name', "%s: %s" % (x, ds[x])), type(ds[x])))
                 ds['action'] = x + " " + ds[x]
                 ds.pop(x)
 
@@ -61,6 +70,8 @@ class Task(object):
                     raise errors.AnsibleError("cannot find lookup plugin named %s for usage in with_%s" % (plugin_name, plugin_name))
 
             elif x.startswith("when_"):
+                if 'when' in ds:
+                    raise errors.AnsibleError("multiple when_* statements specified in task %s" % (ds.get('name', ds['action'])))
                 when_name = x.replace("when_","")
                 ds['when'] = "%s %s" % (when_name, ds[x])
                 ds.pop(x)
@@ -76,9 +87,14 @@ class Task(object):
         self.tags         = [ 'all' ]
         self.register     = ds.get('register', None)
         self.sudo         = utils.boolean(ds.get('sudo', play.sudo))
+        self.environment  = ds.get('environment', {})
+
+        # rather than simple key=value args on the options line, these represent structured data and the values
+        # can be hashes and lists, not just scalars
+        self.args         = ds.get('args', {})
 
         if self.sudo:
-            self.sudo_user    = ds.get('sudo_user', play.sudo_user)
+            self.sudo_user    = utils.template(play.basedir, ds.get('sudo_user', play.sudo_user), play.vars)
             self.sudo_pass    = ds.get('sudo_pass', play.playbook.sudo_pass)
         else:
             self.sudo_user    = None
@@ -97,11 +113,18 @@ class Task(object):
         else:
             self.action      = ds.get('action', '')
             self.delegate_to = ds.get('delegate_to', None)
-            self.transport   = ds.get('transport', play.transport)
+            self.transport   = ds.get('connection', ds.get('transport', play.transport))
+
+        if isinstance(self.action, dict):
+            if 'module' not in self.action:
+                raise errors.AnsibleError("'module' attribute missing from action in task \"%s\"" % ds.get('name', '%s' % self.action))
+            if self.args:
+                raise errors.AnsibleError("'args' cannot be combined with dict 'action' in task \"%s\"" % ds.get('name', '%s' % self.action))
+            self.args = self.action
+            self.action = self.args.pop('module')
 
         # delegate_to can use variables
         if not (self.delegate_to is None):
-            self.delegate_to = utils.template(None, self.delegate_to, self.module_vars)
             # delegate_to: localhost should use local transport
             if self.delegate_to in ['127.0.0.1', 'localhost']:
                 self.transport   = 'local'
@@ -182,63 +205,8 @@ class Task(object):
         if self.when is not None:
             if self.only_if != 'True':
                 raise errors.AnsibleError('when obsoletes only_if, only use one or the other')
-            self.only_if = self.compile_when_to_only_if(self.when)
+            self.only_if = utils.compile_when_to_only_if(self.when)
 
-    def compile_when_to_only_if(self, expression):
-        ''' 
-        when is a shorthand for writing only_if conditionals.  It requires less quoting
-        magic.  only_if is retained for backwards compatibility.
-        '''
-
-        # when: set $variable
-        # when: unset $variable
-        # when: int $x >= $z and $y < 3
-        # when: int $x in $alist
-        # when: float $x > 2 and $y <= $z
-        # when: str $x != $y
-
-        if type(expression) not in [ str, unicode ]:
-            raise errors.AnsibleError("invalid usage of when_ operator: %s" % expression)
-        tokens = expression.split()
-        if len(tokens) < 2:
-            raise errors.AnsibleError("invalid usage of when_ operator: %s" % expression)
-
-        # when_set / when_unset
-        if tokens[0] in [ 'set', 'unset' ]:
-            if len(tokens) != 2:
-                raise errors.AnsibleError("usage: when: <set|unset> <$variableName>")
-            return "is_%s('''%s''')" % (tokens[0], tokens[1])
-
-        # when_integer / when_float / when_string
-        elif tokens[0] in [ 'integer', 'float', 'string' ]:
-            cast = None
-            if tokens[0] == 'integer':
-                cast = 'int'
-            elif tokens[0] == 'string':
-                cast = 'str'
-            elif tokens[0] == 'float':
-                cast = 'float'
-            tcopy = tokens[1:]
-            for (i,t) in enumerate(tokens[1:]):
-                if t.find("$") != -1:
-                    # final variable substitution will happen in Runner code
-                    tcopy[i] = "%s('''%s''')" % (cast, t)
-                else:
-                    tcopy[i] = t
-            return " ".join(tcopy)
-
-        # when_boolean
-        elif tokens[0] in [ 'bool', 'boolean' ]:
-            tcopy = tokens[1:]
-            for (i, t) in enumerate(tcopy):
-                if t.find("$") != -1:
-                    tcopy[i] = "(is_set('''%s''') and '''%s'''.lower() not in ('false', 'no', 'n', 'none', '0', ''))" % (t, t)
-            return " ".join(tcopy)
- 
-        else:
-            raise errors.AnsibleError("invalid usage of when_ operator: %s" % expression)
- 
-
-
-
+        if additional_conditions:
+            self.only_if = '(' + self.only_if + ') and (' + ' ) and ('.join(additional_conditions) + ')'
 

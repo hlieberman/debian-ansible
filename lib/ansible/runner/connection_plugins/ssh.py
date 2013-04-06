@@ -26,19 +26,22 @@ import fcntl
 import ansible.constants as C
 from ansible.callbacks import vvv
 from ansible import errors
+from ansible import utils
 
 class Connection(object):
     ''' ssh based connections '''
 
-    def __init__(self, runner, host, port):
+    def __init__(self, runner, host, port, user, password):
         self.runner = runner
         self.host = host
         self.port = port
+        self.user = user
+        self.password = password
 
     def connect(self):
         ''' connect to the remote host '''
 
-        vvv("ESTABLISH CONNECTION FOR USER: %s" % self.runner.remote_user, host=self.host)
+        vvv("ESTABLISH CONNECTION FOR USER: %s" % self.user, host=self.host)
 
         self.common_args = []
         extra_args = C.ANSIBLE_SSH_ARGS
@@ -52,19 +55,20 @@ class Connection(object):
         if self.port is not None:
             self.common_args += ["-o", "Port=%d" % (self.port)]
         if self.runner.private_key_file is not None:
-            self.common_args += ["-o", "IdentityFile="+self.runner.private_key_file]
-        if self.runner.remote_pass:
+            self.common_args += ["-o", "IdentityFile="+os.path.expanduser(self.runner.private_key_file)]
+        if self.password:
             self.common_args += ["-o", "GSSAPIAuthentication=no",
                                  "-o", "PubkeyAuthentication=no"]
         else:
             self.common_args += ["-o", "KbdInteractiveAuthentication=no",
                                  "-o", "PasswordAuthentication=no"]
-        self.common_args += ["-o", "User="+self.runner.remote_user]
+        self.common_args += ["-o", "User="+self.user]
+        self.common_args += ["-o", "ConnectTimeout=%d" % self.runner.timeout]
 
         return self
 
     def _password_cmd(self):
-        if self.runner.remote_pass:
+        if self.password:
             try:
                 p = subprocess.Popen(["sshpass"], stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -76,31 +80,25 @@ class Connection(object):
         return []
 
     def _send_password(self):
-        if self.runner.remote_pass:
+        if self.password:
             os.close(self.rfd)
-            os.write(self.wfd, "%s\n" % self.runner.remote_pass)
+            os.write(self.wfd, "%s\n" % self.password)
             os.close(self.wfd)
 
-    def exec_command(self, cmd, tmp_path, sudo_user,sudoable=False):
+    def exec_command(self, cmd, tmp_path, sudo_user,sudoable=False, executable='/bin/sh'):
         ''' run a command on the remote host '''
 
         ssh_cmd = self._password_cmd()
         ssh_cmd += ["ssh", "-tt", "-q"] + self.common_args + [self.host]
 
-        if self.runner.sudo and sudoable:
-            # Rather than detect if sudo wants a password this time, -k makes
-            # sudo always ask for a password if one is required.
-            # Passing a quoted compound command to sudo (or sudo -s)
-            # directly doesn't work, so we shellquote it with pipes.quote()
-            # and pass the quoted string to the user's shell.  We loop reading
-            # output until we see the randomly-generated sudo prompt set with
-            # the -p option.
-            randbits = ''.join(chr(random.randint(ord('a'), ord('z'))) for x in xrange(32))
-            prompt = '[sudo via ansible, key=%s] password: ' % randbits
-            sudocmd = 'sudo -k && sudo -p "%s" -u %s /bin/sh -c %s' % (
-                prompt, sudo_user, pipes.quote(cmd))
-            cmd = sudocmd
-        ssh_cmd.append('/bin/sh -c ' + pipes.quote(cmd))
+        if not self.runner.sudo or not sudoable:
+            if executable:
+                ssh_cmd.append(executable + ' -c ' + pipes.quote(cmd))
+            else:
+                ssh_cmd.append(cmd)
+        else:
+            sudocmd, prompt = utils.make_sudo_cmd(sudo_user, executable, cmd)
+            ssh_cmd.append(sudocmd)
 
         vvv("EXEC %s" % ssh_cmd, host=self.host)
         try:
@@ -108,11 +106,11 @@ class Connection(object):
             import pty
             master, slave = pty.openpty()
             p = subprocess.Popen(ssh_cmd, stdin=slave,
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             stdin = os.fdopen(master, 'w', 0)
         except:
             p = subprocess.Popen(ssh_cmd, stdin=subprocess.PIPE,
-                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             stdin = p.stdin
 
         self._send_password()
@@ -137,11 +135,18 @@ class Connection(object):
 
         # We can't use p.communicate here because the ControlMaster may have stdout open as well
         stdout = ''
+        stderr = ''
         while True:
-            rfd, wfd, efd = select.select([p.stdout], [], [p.stdout], 1)
+            rfd, wfd, efd = select.select([p.stdout, p.stderr], [], [p.stdout, p.stderr], 1)
             if p.stdout in rfd:
                 dat = os.read(p.stdout.fileno(), 9000)
                 stdout += dat
+                if dat == '':
+                    p.wait()
+                    break
+            elif p.stderr in rfd:
+                dat = os.read(p.stderr.fileno(), 9000)
+                stderr += dat
                 if dat == '':
                     p.wait()
                     break
@@ -149,10 +154,10 @@ class Connection(object):
                 break
         stdin.close() # close stdin after we read from stdout (see also issue #848)
 
-        if p.returncode != 0 and stdout.find('Bad configuration option: ControlPersist') != -1:
+        if p.returncode != 0 and stderr.find('Bad configuration option: ControlPersist') != -1:
             raise errors.AnsibleError('using -c ssh on certain older ssh versions may not support ControlPersist, set ANSIBLE_SSH_ARGS="" (or ansible_ssh_args in the config file) before running again')
 
-        return ('', stdout, '')
+        return (p.returncode, '', stdout, stderr)
 
     def put_file(self, in_path, out_path):
         ''' transfer a file from local to remote '''

@@ -28,8 +28,11 @@ class ActionModule(object):
     def __init__(self, runner):
         self.runner = runner
 
-    def run(self, conn, tmp, module_name, module_args, inject):
-        args = utils.parse_kv(module_args)
+    def run(self, conn, tmp, module_name, module_args, inject, complex_args=None, **kwargs):
+        args = {}
+        if complex_args:
+            args.update(complex_args)
+        args.update(utils.parse_kv(module_args))
         if not 'msg' in args:
             args['msg'] = 'Hello world!'
 

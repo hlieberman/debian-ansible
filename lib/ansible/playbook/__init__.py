@@ -1,4 +1,4 @@
-# (c) 2012, Michael DeHaan <michael.dehaan@gmail.com>
+# (c) 2012-2013, Michael DeHaan <michael.dehaan@gmail.com>
 #
 # This file is part of Ansible
 #
@@ -61,7 +61,9 @@ class PlayBook(object):
         extra_vars       = None,
         only_tags        = None,
         subset           = C.DEFAULT_SUBSET,
-        inventory        = None):
+        inventory        = None,
+        check            = False,
+        diff             = False):
 
         """
         playbook:         path to a playbook file
@@ -79,6 +81,7 @@ class PlayBook(object):
         stats:            holds aggregrate data about events occuring to each host
         sudo:             if not specified per play, requests all plays use sudo mode
         inventory:        can be specified instead of host_list to use a pre-existing inventory object
+        check:            don't change anything, just try to detect some potential changes
         """
 
         self.SETUP_CACHE = SETUP_CACHE
@@ -91,6 +94,8 @@ class PlayBook(object):
         if only_tags is None:
             only_tags = [ 'all' ]
 
+        self.check            = check
+        self.diff             = diff
         self.module_path      = module_path
         self.forks            = forks
         self.timeout          = timeout
@@ -109,14 +114,20 @@ class PlayBook(object):
         self.private_key_file = private_key_file
         self.only_tags        = only_tags
 
+        self.callbacks.playbook = self
+        self.runner_callbacks.playbook = self
+
         if inventory is None:
             self.inventory    = ansible.inventory.Inventory(host_list)
             self.inventory.subset(subset)
         else:
             self.inventory    = inventory
 
-        self.basedir     = os.path.dirname(playbook)
-        (self.playbook, self.play_basedirs) = self._load_playbook_from_file(playbook)
+        self.basedir     = os.path.dirname(playbook) or '.'
+        vars = {}
+        if self.inventory.basedir() is not None:
+            vars['inventory_dir'] = self.inventory.basedir()
+        (self.playbook, self.play_basedirs) = self._load_playbook_from_file(playbook, vars)
 
     # *****************************************************
 
@@ -132,46 +143,51 @@ class PlayBook(object):
         if type(playbook_data) != list:
             raise errors.AnsibleError("parse error: playbooks must be formatted as a YAML list")
 
-        basedir = os.path.dirname(path)
+        basedir = os.path.dirname(path) or '.'
         utils.plugins.push_basedir(basedir)
         for play in playbook_data:
             if type(play) != dict:
                 raise errors.AnsibleError("parse error: each play in a playbook must a YAML dictionary (hash), recieved: %s" % play)
             if 'include' in play:
-                if len(play.keys()) <= 2:
-                    tokens = shlex.split(play['include'])
+                tokens = shlex.split(play['include'])
 
-                    items = ['']
-                    for k in play.keys():
-                        if not k.startswith("with_"):
+                items = ['']
+                for k in play.keys():
+                    if not k.startswith("with_"):
+                        # These are the keys allowed to be mixed with playbook includes
+                        if k in ("include", "vars"):
                             continue
-                        plugin_name = k[5:]
-                        if plugin_name not in utils.plugins.lookup_loader:
-                            raise errors.AnsibleError("cannot find lookup plugin named %s for usage in with_%s" % (plugin_name, plugin_name))
-                        terms = utils.template_ds(basedir, play[k], vars)
-                        items = utils.plugins.lookup_loader.get(plugin_name, basedir=basedir, runner=None).run(terms, inject=vars)
-                        break
+                        else:
+                            raise errors.AnsibleError("parse error: playbook includes cannot be used with other directives: %s" % play)
+                    plugin_name = k[5:]
+                    if plugin_name not in utils.plugins.lookup_loader:
+                        raise errors.AnsibleError("cannot find lookup plugin named %s for usage in with_%s" % (plugin_name, plugin_name))
+                    terms = utils.template(basedir, play[k], vars)
+                    items = utils.plugins.lookup_loader.get(plugin_name, basedir=basedir, runner=None).run(terms, inject=vars)
 
-                    for item in items:
-                        incvars = vars.copy()
-                        incvars['item'] = item
-                        for t in tokens[1:]:
-                            (k,v) = t.split("=", 1)
-                            incvars[k] = utils.template_ds(basedir, v, incvars)
-                        included_path = utils.path_dwim(basedir, tokens[0])
-                        (plays, basedirs) = self._load_playbook_from_file(included_path, incvars)
-                        for p in plays:
-                            if 'vars' not in p:
-                                p['vars'] = {}
-                            if isinstance(p['vars'], dict):
-                                p['vars'].update(incvars)
-                            elif isinstance(p['vars'], list):
-                                p['vars'].extend([dict(k=v) for k,v in incvars.iteritems()])
-                        accumulated_plays.extend(plays)
-                        play_basedirs.extend(basedirs)
-
-                else:
-                    raise errors.AnsibleError("parse error: playbook includes cannot be used with other directives: %s" % play)
+                for item in items:
+                    incvars = vars.copy()
+                    incvars['item'] = item
+                    if 'vars' in play:
+                        if isinstance(play['vars'], dict):
+                            incvars.update(play['vars'])
+                        elif isinstance(play['vars'], list):
+                            for v in play['vars']:
+                                incvars.update(v)
+                    for t in tokens[1:]:
+                        (k,v) = t.split("=", 1)
+                        incvars[k] = utils.template(basedir, v, incvars)
+                    included_path = utils.path_dwim(basedir, utils.template(basedir, tokens[0], incvars))
+                    (plays, basedirs) = self._load_playbook_from_file(included_path, incvars)
+                    for p in plays:
+                        if 'vars' not in p:
+                            p['vars'] = {}
+                        if isinstance(p['vars'], dict):
+                            p['vars'].update(incvars)
+                        elif isinstance(p['vars'], list):
+                            p['vars'].extend([dict(k=v) for k,v in incvars.iteritems()])
+                    accumulated_plays.extend(plays)
+                    play_basedirs.extend(basedirs)
             else:
                 accumulated_plays.append(play)
                 play_basedirs.append(basedir)
@@ -190,6 +206,10 @@ class PlayBook(object):
         self.callbacks.on_start()
         for (play_ds, play_basedir) in zip(self.playbook, self.play_basedirs):
             play = Play(self, play_ds, play_basedir)
+
+            self.callbacks.play = play
+            self.runner_callbacks.play = play
+            
             matched_tags, unmatched_tags = play.compare_tags(self.only_tags)
             matched_tags_all = matched_tags_all | matched_tags
             unmatched_tags_all = unmatched_tags_all | unmatched_tags
@@ -262,7 +282,8 @@ class PlayBook(object):
             setup_cache=self.SETUP_CACHE, basedir=task.play.basedir,
             conditional=task.only_if, callbacks=self.runner_callbacks,
             sudo=task.sudo, sudo_user=task.sudo_user,
-            transport=task.transport, sudo_pass=task.sudo_pass, is_playbook=True
+            transport=task.transport, sudo_pass=task.sudo_pass, is_playbook=True,
+            check=self.check, diff=self.diff, environment=task.environment, complex_args=task.args
         )
 
         if task.async_seconds == 0:
@@ -289,8 +310,13 @@ class PlayBook(object):
     def _run_task(self, play, task, is_handler):
         ''' run a single task in the playbook and recursively run any subtasks.  '''
 
-        self.callbacks.on_task_start(utils.template(play.basedir, task.name, task.module_vars), is_handler)
+        self.callbacks.task = task
+        self.runner_callbacks.task = task
 
+        self.callbacks.on_task_start(utils.template(play.basedir, task.name, task.module_vars, lookup_fatal=False), is_handler)
+        if hasattr(self.callbacks, 'skip_task') and self.callbacks.skip_task:
+            return True
+        
         # load up an appropriate ansible runner to run the task in parallel
         results = self._run_task_internal(task)
 
@@ -310,6 +336,8 @@ class PlayBook(object):
                 continue
             facts = result.get('ansible_facts', {})
             self.SETUP_CACHE[host].update(facts)
+            # extra vars need to always trump - so update  again following the facts
+            self.SETUP_CACHE[host].update(self.extra_vars)
             if task.register:
                 if 'stdout' in result:
                     result['stdout_lines'] = result['stdout'].splitlines()
@@ -358,6 +386,9 @@ class PlayBook(object):
 
         self.callbacks.on_setup()
         self.inventory.restrict_to(host_list)
+        
+        self.callbacks.task = None
+        self.runner_callbacks.task = None
 
         # push any variables down to the system
         setup_results = ansible.runner.Runner(
@@ -366,6 +397,7 @@ class PlayBook(object):
             remote_pass=self.remote_pass, remote_port=play.remote_port, private_key_file=self.private_key_file,
             setup_cache=self.SETUP_CACHE, callbacks=self.runner_callbacks, sudo=play.sudo, sudo_user=play.sudo_user,
             transport=play.transport, sudo_pass=self.sudo_pass, is_playbook=True, module_vars=play.vars,
+            check=self.check, diff=self.diff
         ).run()
         self.stats.compute(setup_results, setup=True)
 
@@ -385,7 +417,6 @@ class PlayBook(object):
         ''' run a list of tasks for a given pattern, in order '''
 
         self.callbacks.on_play_start(play.name)
-
         # if no hosts matches this play, drop out
         if not self.inventory.list_hosts(play.hosts):
             self.callbacks.on_no_hosts_matched()

@@ -19,11 +19,13 @@
 
 import fnmatch
 import os
+import re
 
 import subprocess
 import ansible.constants as C
 from ansible.inventory.ini import InventoryParser
 from ansible.inventory.script import InventoryScript
+from ansible.inventory.dir import InventoryDirectory
 from ansible.inventory.group import Group
 from ansible.inventory.host import Host
 from ansible import errors
@@ -34,7 +36,7 @@ class Inventory(object):
     Host inventory for ansible.
     """
 
-    __slots__ = [ 'host_list', 'groups', '_restriction', '_also_restriction', '_subset', '_is_script',
+    __slots__ = [ 'host_list', 'groups', '_restriction', '_also_restriction', '_subset', 
                   'parser', '_vars_per_host', '_vars_per_group', '_hosts_cache', '_groups_list']
 
     def __init__(self, host_list=C.DEFAULT_HOST_LIST):
@@ -59,18 +61,13 @@ class Inventory(object):
         self._also_restriction = None
         self._subset = None
 
-        # whether the inventory file is a script
-        self._is_script = False
-
         if type(host_list) in [ str, unicode ]:
             if host_list.find(",") != -1:
                 host_list = host_list.split(",")
                 host_list = [ h for h in host_list if h and h.strip() ]
 
-        else:
-            utils.plugins.vars_loader.add_directory(self.basedir())
-
         if type(host_list) == list:
+            self.parser = None
             all = Group('all')
             self.groups = [ all ]
             for x in host_list:
@@ -79,20 +76,32 @@ class Inventory(object):
                     all.add_host(Host(tokens[0], tokens[1]))
                 else:
                     all.add_host(Host(x))
-        elif utils.is_executable(host_list):
-            self._is_script = True
-            self.parser = InventoryScript(filename=host_list)
-            self.groups = self.parser.groups.values()
-        else:
-            data = file(host_list).read()
-            if not data.startswith("---"):
-                self.parser = InventoryParser(filename=host_list)
+        elif os.path.exists(host_list):
+            if os.path.isdir(host_list):
+                # Ensure basedir is inside the directory
+                self.host_list = os.path.join(self.host_list, "")
+                self.parser = InventoryDirectory(filename=host_list)
+                self.groups = self.parser.groups.values()
+            elif utils.is_executable(host_list):
+                self.parser = InventoryScript(filename=host_list)
                 self.groups = self.parser.groups.values()
             else:
-                raise errors.AnsibleError("YAML inventory support is deprecated in 0.6 and removed in 0.7, see the migration script in examples/scripts in the git checkout")
+                data = file(host_list).read()
+                if not data.startswith("---"):
+                    self.parser = InventoryParser(filename=host_list)
+                    self.groups = self.parser.groups.values()
+                else:
+                    raise errors.AnsibleError("YAML inventory support is deprecated in 0.6 and removed in 0.7, see the migration script in examples/scripts in the git checkout")
+
+            utils.plugins.vars_loader.add_directory(self.basedir(), with_subdir=True)
+        else:
+            raise errors.AnsibleError("Unable to find an inventory file, specify one with -i ?")
 
     def _match(self, str, pattern_str):
-        return fnmatch.fnmatch(str, pattern_str)
+        if pattern_str.startswith('~'):
+            return re.search(pattern_str[1:], str)
+        else:
+            return fnmatch.fnmatch(str, pattern_str)
 
     def get_hosts(self, pattern="all"):
         """ 
@@ -104,27 +113,12 @@ class Inventory(object):
         if isinstance(pattern, list):
             pattern = ';'.join(pattern)
         patterns = pattern.replace(";",":").split(":")
-        positive_patterns = [ p for p in patterns if not p.startswith("!") ]
-        negative_patterns = [ p for p in patterns if p.startswith("!") ]
-
-        # find hosts matching positive patterns
-        hosts = self._get_hosts(positive_patterns)
-
-        # exclude hosts mentioned in a negative pattern
-        if len(negative_patterns):
-            exclude_hosts = [ h.name for h in self._get_hosts(negative_patterns) ]
-            hosts = [ h for h in hosts if h.name not in exclude_hosts ]
+        hosts = self._get_hosts(patterns)
 
         # exclude hosts not in a subset, if defined
         if self._subset:
-            positive_subsetp = [ p for p in self._subset if not p.startswith("!") ]
-            negative_subsetp = [ p for p in self._subset if p.startswith("!") ]
-            if len(positive_subsetp):
-                positive_subset = [ h.name for h in self._get_hosts(positive_subsetp) ]
-                hosts = [ h for h in hosts if (h.name in positive_subset) ]
-            if len(negative_subsetp):
-                negative_subset = [ h.name for h in self._get_hosts(negative_subsetp) ]
-                hosts = [ h for h in hosts if (h.name not in negative_subset)]
+            subset = self._get_hosts(self._subset)
+            hosts.intersection_update(subset)
 
         # exclude hosts mentioned in any restriction (ex: failed hosts)
         if self._restriction is not None:
@@ -135,27 +129,35 @@ class Inventory(object):
         return sorted(hosts, key=lambda x: x.name)
 
     def _get_hosts(self, patterns):
+        """
+        finds hosts that match a list of patterns. Handles negative
+        matches as well as intersection matches.
+        """
+
+        hosts = set()
+        for p in patterns:
+            if p.startswith("!"):
+                # Discard excluded hosts
+                hosts.difference_update(self.__get_hosts(p))
+            elif p.startswith("&"):
+                # Only leave the intersected hosts
+                hosts.intersection_update(self.__get_hosts(p))
+            else:
+                # Get all hosts from both patterns
+                hosts.update(self.__get_hosts(p))
+        return hosts
+
+    def __get_hosts(self, pattern):
         """ 
-        finds hosts that postively match a particular list of patterns.  Does not
+        finds hosts that postively match a particular pattern.  Does not
         take into account negative matches.
         """
 
-        by_pattern = {}
-        for p in patterns:
-            (name, enumeration_details) = self._enumeration_info(p)
-            hpat = self._hosts_in_unenumerated_pattern(name)
-            hpat = sorted(hpat, key=lambda x: x.name)
-            by_pattern[p] = hpat
+        (name, enumeration_details) = self._enumeration_info(pattern)
+        hpat = self._hosts_in_unenumerated_pattern(name)
+        hpat = sorted(hpat, key=lambda x: x.name)
 
-        ranged = {}
-        for (pat, hosts) in by_pattern.iteritems():
-            ranged[pat] = self._apply_ranges(pat, hosts)
-
-        results = []
-        for (pat, hosts) in ranged.iteritems():
-            results.extend(hosts)
-
-        return list(set(results))
+        return set(self._apply_ranges(pattern, hpat))
 
     def _enumeration_info(self, pattern):
         """
@@ -164,14 +166,15 @@ class Inventory(object):
         a tuple of (start, stop) or None
         """
 
-        if not "[" in pattern:
+        if not "[" in pattern or pattern.startswith('~'):
             return (pattern, None)
         (first, rest) = pattern.split("[")
         rest = rest.replace("]","")
-        if not "-" in rest:
-            raise errors.AnsibleError("invalid pattern: %s" % pattern)
-        (left, right) = rest.split("-",1)
-        return (first, (left, right))
+        if "-" in rest:
+            (left, right) = rest.split("-",1)
+            return (first, (left, right))
+        else:
+            return (first, (rest, rest))
 
     def _apply_ranges(self, pat, hosts):
         """
@@ -200,7 +203,7 @@ class Inventory(object):
 
         hosts = {}
         # ignore any negative checks here, this is handled elsewhere
-        pattern = pattern.replace("!","")
+        pattern = pattern.replace("!","").replace("&", "")
 
         groups = self.get_groups()
         for group in groups:
@@ -278,33 +281,20 @@ class Inventory(object):
             if updated is not None:
                 vars.update(updated)
 
-        if self._is_script:
-            cmd = [self.host_list,"--host",hostname]
-            try:
-                sp = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            except OSError, e:
-                raise errors.AnsibleError("problem running %s (%s)" % (' '.join(cmd), e))
-            (out, err) = sp.communicate()
-            results = utils.parse_json(out)
-
-            # FIXME: this is a bit redundant with host.py and should share code
-            results['inventory_hostname'] = hostname
-            results['inventory_hostname_short'] = hostname.split('.')[0]
-            groups = [ g.name for g in host.get_groups() if g.name != 'all' ]
-            results['group_names'] = sorted(groups)
-            vars.update(results)
-        else:
-            vars.update(host.get_variables())
+        vars.update(host.get_variables())
+        if self.parser is not None:
+            vars.update(self.parser.get_host_variables(host))
         return vars
 
     def add_group(self, group):
         self.groups.append(group)
+        self._groups_list = None  # invalidate internal cache 
 
     def list_hosts(self, pattern="all"):
         return [ h.name for h in self.get_hosts(pattern) ]
 
     def list_groups(self):
-        return sorted([ g.name for g in self.groups ], key=lambda x: x.name)
+        return sorted([ g.name for g in self.groups ], key=lambda x: x)
 
     # TODO: remove this function
     def get_restriction(self):

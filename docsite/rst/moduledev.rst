@@ -1,11 +1,16 @@
 Module Development
 ==================
 
+.. image:: http://ansible.cc/docs/_static/ansible_fest_2013.png
+   :alt: ansiblefest 2013
+   :target: http://ansibleworks.com/fest
+
+
 Ansible modules are reusable units of magic that can be used by the Ansible API,
 or by the `ansible` or `ansible-playbook` programs.
 
 Modules can be written in any language and are found in the path specified
-by `ANSIBLE_LIBRARY_PATH` or the ``--module-path`` command line option.
+by `ANSIBLE_LIBRARY` or the ``--module-path`` command line option.
 
 .. contents::
    :depth: 2
@@ -249,6 +254,32 @@ can function outside of Ansible.
 If submitting a module to ansible's core code, which we encourage, use of the AnsibleModule
 class is required.
 
+Check Mode
+``````````
+.. versionadded:: 1.1
+
+Modules may optionally support check mode. If the user runs Ansible in check
+mode, the module should try to predict whether changes will occur.
+
+For your module to support check mode, you must pass ``supports_check_mode=True``
+when instantiating the AnsibleModule object. The AnsibleModule.check_mode attribute
+will evaluate to True when check mode is enabled. For example::
+
+    module = AnsibleModule(
+        argument_spec = dict(...),
+        supports_check_mode=True
+    )
+
+    if module.check_mode:
+        # Check if any changes would be made by don't actually make those changes
+        module.exit_json(changed=check_if_system_state_would_be_changed())
+
+Remember that, as module developer, you are responsible for ensuring that no
+system state is altered when the user enables check mode.
+
+If your module does not support check mode, when the user runs Ansible in check
+mode, your module will simply be skipped.
+
 Common Pitfalls
 ```````````````
 
@@ -325,7 +356,7 @@ Example
 Here's a correctly formatted YAML document we could use for a
 ``DOCUMENTATION`` string:
 
-.. literalinclude:: ../DOCUMENTATION.yaml
+.. literalinclude:: ../../examples/DOCUMENTATION.yaml
 
 This is available in the 'examples/' directory of the of the Ansible
 github repository, and you can have that generated with
@@ -353,6 +384,19 @@ These formatting functions are ``U()``, ``M()``, ``I()``, and ``C()``
 for URL, module, italic, and constant-width respectively. It is suggested
 to use ``C()`` for file and option names, and ``I()`` when referencing
 parameters; module names should be specifies as ``M(module)``.
+
+Examples (which typically contain colons, quotes, etc.) are difficult
+to format with YAML, so these can (alternatively, or additionally) be
+written in plain text in an ``EXAMPLES`` string within the module
+like this::
+
+    EXAMPLES = '''
+    - action: modulename opt1=arg1 opt2=arg2
+    '''
+
+The ``module_formatter.py`` script and ``ansible-doc(1)`` append the
+``EXAMPLES`` blob after any existing ``examples`` you may have in the
+YAML ``DOCUMENTATION`` string.
 
 Building & Testing
 ++++++++++++++++++
@@ -383,6 +427,10 @@ output formats available:
    If you're having a problem with the syntax of your YAML you can
    validate it on the `YAML Lint <http://www.yamllint.com/>`_ website.
 
+.. tip::
+
+    You can use ANSIBLE_KEEP_REMOTE_FILES=1 to prevent ansible from
+    deleting the remote files so you can debug your module.
 
 Getting Your Module Into Core
 `````````````````````````````
