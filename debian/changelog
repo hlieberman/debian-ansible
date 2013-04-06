@@ -1,4 +1,4 @@
-ansible (1.1+dfsg-1) UNRELEASED; urgency=low
+ansible (1.1+dfsg-1) unstable; urgency=low
 
   * New upstream release.
   * Update patches disable-google-analytics.patch and 
@@ -9,7 +9,7 @@ ansible (1.1+dfsg-1) UNRELEASED; urgency=low
     available or may be used for tracking users activity without their
     knowledge by the third-party.
 
- -- Janos Guljas <janos@debian.org>  Sat, 06 Apr 2013 21:21:24 +0200
+ -- Janos Guljas <janos@debian.org>  Sat, 06 Apr 2013 23:27:08 +0200
 
 ansible (0.9+dfsg-1) unstable; urgency=low
 
