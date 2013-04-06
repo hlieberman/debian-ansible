@@ -32,8 +32,15 @@ class ActionModule(object):
     def __init__(self, runner):
         self.runner = runner
 
-    def run(self, conn, tmp, module_name, module_args, inject):
-        args = parse_kv(self.runner.module_args)
+    def run(self, conn, tmp, module_name, module_args, inject, complex_args=None, **kwargs):
+
+        # the group_by module does not need to pay attention to check mode.
+        # it always runs.
+
+        args = {}
+        if complex_args:
+            args.update(complex_args)
+        args.update(parse_kv(self.runner.module_args))
         if not 'key' in args:
             raise ae("'key' is a required argument.")
 
@@ -64,6 +71,7 @@ class ActionModule(object):
                 inv_group = ansible.inventory.Group(name=group)
                 inventory.add_group(inv_group)
             for host in hosts:
+                del self.runner.inventory._vars_per_host[host]
                 inv_host = inventory.get_host(host)
                 if not inv_host:
                     inv_host = ansible.inventory.Host(name=host)

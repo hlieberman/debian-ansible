@@ -274,7 +274,7 @@ class Ec2Inventory(object):
         addressable '''
 
         # Only want running instances
-        if instance.state == 'terminated':
+        if instance.state != 'running':
             return
 
         # Select the best destination address
@@ -283,7 +283,7 @@ class Ec2Inventory(object):
         else:
             dest =  getattr(instance, self.destination_variable)
 
-        if dest == None:
+        if not dest:
             # Skip instances we cannot address (e.g. private VPC subnet)
             return
 
@@ -303,7 +303,7 @@ class Ec2Inventory(object):
         self.push(self.inventory, self.to_safe('type_' + instance.instance_type), dest)
         
         # Inventory: Group by key pair
-        if instance.key_name != None:
+        if instance.key_name:
             self.push(self.inventory, self.to_safe('key_' + instance.key_name), dest)
         
         # Inventory: Group by security group
@@ -329,7 +329,15 @@ class Ec2Inventory(object):
             # Need to load index from cache
             self.load_index_from_cache()
 
+        if not self.args.host in self.index:
+            # try updating the cache
+            self.do_api_calls_update_cache()
+            if not self.args.host in self.index:
+                # host migh not exist anymore
+                return self.json_format_dict({}, True)
+
         (region, instance_id) = self.index[self.args.host]
+
         instance = self.get_instance(region, instance_id)
         instance_vars = {}
         for key in vars(instance):

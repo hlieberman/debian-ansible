@@ -1,4 +1,4 @@
-# (C) 2012, Michael DeHaan, <michael.dehaan@gmail.com>
+# (C) 2012-2013, Michael DeHaan, <michael.dehaan@gmail.com>
 
 # This file is part of Ansible
 #
@@ -20,9 +20,8 @@ import sys
 import getpass
 import os
 import subprocess
-import os.path
+import random
 from ansible.color import stringc
-import ansible.constants as C
 
 cowsay = None
 if os.getenv("ANSIBLE_NOCOWS") is not None:
@@ -34,6 +33,25 @@ elif os.path.exists("/usr/games/cowsay"):
 elif os.path.exists("/usr/local/bin/cowsay"):
     # BSD path for cowsay
     cowsay = "/usr/local/bin/cowsay"
+elif os.path.exists("/opt/local/bin/cowsay"):
+    # MacPorts path for cowsay
+    cowsay = "/opt/local/bin/cowsay"
+
+noncow = os.getenv("ANSIBLE_COW_SELECTION",None)
+if cowsay and noncow == 'random':
+    cmd = subprocess.Popen([cowsay, "-l"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    (out, err) = cmd.communicate()
+    cows = out.split()
+    cows.append(False)
+    noncow = random.choice(cows)
+
+# ****************************************************************************
+# 1.1 DEV NOTES
+# FIXME -- in order to make an ideal callback system, all of these should have
+# access to the current task and/or play and host objects.  We need to this
+# while keeping present callbacks functionally intact and will do so.
+# ****************************************************************************
+
 
 def call_callback_module(method_name, *args, **kwargs):
 
@@ -123,9 +141,13 @@ def regular_generic_msg(hostname, result, oneline, caption):
 
 def banner(msg):
 
-    if cowsay != None:
-        cmd = subprocess.Popen([cowsay, "-W", "60", msg],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if cowsay:
+        runcmd = [cowsay,"-W", "60"]
+        if noncow:
+            runcmd.append('-f')
+            runcmd.append(noncow)
+        runcmd.append(msg)
+        cmd = subprocess.Popen(runcmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         (out, err) = cmd.communicate()
         return "%s\n" % out
     else:
@@ -209,6 +231,9 @@ class DefaultRunnerCallbacks(object):
     def on_async_failed(self, host, res, jid):
         call_callback_module('runner_on_async_failed', host, res, jid)
 
+    def on_file_diff(self, host, diff):
+        call_callback_module('runner_on_file_diff', diff)
+
 ########################################################################
 
 class CliRunnerCallbacks(DefaultRunnerCallbacks):
@@ -272,6 +297,10 @@ class CliRunnerCallbacks(DefaultRunnerCallbacks):
         print host_report_msg(host, self.options.module_name, result2, self.options.one_line)
         if self.options.tree:
             utils.write_tree_file(self.options.tree, host, utils.jsonify(result2,format=True))
+    
+    def on_file_diff(self, host, diff):
+        print utils.get_diff(diff)
+        super(CliRunnerCallbacks, self).on_file_diff(host, diff)
 
 ########################################################################
 
@@ -404,6 +433,9 @@ class PlaybookRunnerCallbacks(DefaultRunnerCallbacks):
         print stringc(msg, 'red')
         super(PlaybookRunnerCallbacks, self).on_async_failed(host,res,jid)
 
+    def on_file_diff(self, host, diff):
+        print utils.get_diff(diff)
+        super(PlaybookRunnerCallbacks, self).on_file_diff(host, diff)
 
 ########################################################################
 
@@ -421,7 +453,7 @@ class PlaybookCallbacks(object):
         call_callback_module('playbook_on_notify', host, handler)
 
     def on_no_hosts_matched(self):
-        print stringc("no hosts matched", 'red')
+        print stringc("skipping: no hosts matched", 'cyan')
         call_callback_module('playbook_on_no_hosts_matched')
 
     def on_no_hosts_remaining(self):
@@ -432,10 +464,24 @@ class PlaybookCallbacks(object):
         msg = "TASK: [%s]" % name
         if is_conditional:
             msg = "NOTIFIED: [%s]" % name
-        print banner(msg)
+
+        if hasattr(self, 'step') and self.step:
+            resp = raw_input('Perform task: %s (y/n/c): ' % name)
+            if resp.lower() in ['y','yes']:
+                self.skip_task = False
+                print banner(msg)                
+            elif resp.lower() in ['c', 'continue']:
+                self.skip_task = False
+                self.step = False
+                print banner(msg)
+            else:
+                self.skip_task = True
+        else:
+            print banner(msg)                
+        
         call_callback_module('playbook_on_task_start', name, is_conditional)
 
-    def on_vars_prompt(self, varname, private=True, prompt=None, encrypt=None, confirm=False, salt_size=None, salt=None):
+    def on_vars_prompt(self, varname, private=True, prompt=None, encrypt=None, confirm=False, salt_size=None, salt=None, default=None):
 
         if prompt:
             msg = "%s: " % prompt
@@ -458,10 +504,17 @@ class PlaybookCallbacks(object):
         else:
             result = prompt(msg, private)
 
+        # if result is false and default is not None
+        if not result and default:
+            result = default
+
+
         if encrypt:
             result = utils.do_encrypt(result,encrypt,salt_size,salt)
 
-        call_callback_module('playbook_on_vars_prompt', varname, private=private, prompt=prompt, encrypt=encrypt, confirm=confirm, salt_size=salt_size, salt=None)
+        call_callback_module( 'playbook_on_vars_prompt', varname, private=private, prompt=prompt,
+                               encrypt=encrypt, confirm=confirm, salt_size=salt_size, salt=None, default=default
+                            )
 
         return result
 

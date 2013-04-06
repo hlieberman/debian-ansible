@@ -15,13 +15,21 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+def flatten(terms):
+    ret = []
+    for term in terms:
+        if isinstance(term, list):
+            ret.extend(term)
+        else:
+            ret.append(term)
+    return ret
+
 class LookupModule(object):
 
     def __init__(self, **kwargs):
         pass
 
     def run(self, terms, **kwargs):
-        return terms
-
-
-
+        if isinstance(terms, basestring):
+            terms = [ terms ]
+        return flatten(terms)

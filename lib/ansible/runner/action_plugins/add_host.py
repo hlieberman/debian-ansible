@@ -34,36 +34,56 @@ class ActionModule(object):
     def __init__(self, runner):
         self.runner = runner
 
-    def run(self, conn, tmp, module_name, module_args, inject):
-        args = parse_kv(module_args)
-        if not 'hostname' in args:
-            raise ae("'hostname' is a required argument.")
+    def run(self, conn, tmp, module_name, module_args, inject, complex_args=None, **kwargs):
 
-        vv("created 'add_host' ActionModule: hostname=%s"%(args['hostname']))
+        if self.runner.check:
+            return ReturnData(conn=conn, comm_ok=True, result=dict(skipped=True, msg='check mode not supported for this module'))
 
+        args = {}
+        if complex_args:
+            args.update(complex_args)
+        args.update(parse_kv(module_args))
+        if not 'hostname' in args and not 'name' in args:
+            raise ae("'name' is a required argument.")
 
         result = {'changed': True}
 
-        new_host = Host(args['hostname'])
+        # Parse out any hostname:port patterns
+        new_hostname = args.get('hostname', args.get('name', None))
+        vv("creating host via 'add_host': hostname=%s" % new_hostname)
+
+        if ":" in new_hostname:
+            new_hostname, new_port = new_hostname.split(":")
+            args['ansible_ssh_port'] = new_port
+        
+        # create host and get inventory    
+        new_host = Host(new_hostname)
         inventory = self.runner.inventory
+        
+        # Add any variables to the new_host
+        for k in args.keys():
+            if not k in [ 'name', 'hostname', 'groupname', 'groups' ]:
+                new_host.set_variable(k, args[k]) 
+                
         
         # add the new host to the 'all' group
         allgroup = inventory.get_group('all')
         allgroup.add_host(new_host)
         result['changed'] = True
-        
+       
+        groupnames = args.get('groupname', args.get('groups', '')) 
         # add it to the group if that was specified
-        if 'groupname' in args:
-            if not inventory.get_group(args['groupname']):
-                new_group = Group(args['groupname'])
-                inventory.add_group(new_group)
-                
-            ngobj = inventory.get_group(args['groupname'])
-            ngobj.add_host(new_host)
-            vv("created 'add_host' ActionModule: groupname=%s"%(args['groupname']))
-            result['new_group'] = args['groupname']
+        if groupnames != '':
+            for group_name in groupnames.split(","):
+                if not inventory.get_group(group_name):
+                    new_group = Group(group_name)
+                    inventory.add_group(new_group)
+                grp = inventory.get_group(group_name)
+                grp.add_host(new_host)
+            vv("added host to group via add_host module: %s" % group_name)
+            result['new_groups'] = groupnames.split(",")
             
-        result['new_host'] = args['hostname']
+        result['new_host'] = new_hostname
         
         return ReturnData(conn=conn, comm_ok=True, result=result)
 

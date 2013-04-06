@@ -4,18 +4,21 @@ DOCUMENTATION = """
 module: script
 short_description: Runs a local script on a remote node
 description:
-     - The command module takes the script name followed by a list of space-delimited arguments.
-     - The given command will be processed through the shell environment.
+     - The M(script) module takes the script name followed by a list of
+       space-delimited arguments.
+     - The given script will be processed through the shell environment.
+     - This module does not require python on the remote system, much like
+       the M(raw) module.
 options:
   free_form:
     description:
-      - the command module takes a free form command to run
+      - path to the local script file followed by optional arguments.
     required: true
     default: null
     aliases: []
 examples:
   - description: "Example from Ansible Playbooks"
-    code: "script: /some/local/script.sh --some-arguments 1234"
+    code: "action: script /some/local/script.sh --some-arguments 1234"
 notes:
   - It is preferable to write Ansible modules than pushing scripts. Convert your script to an Ansible module for bonus points!
 author: Michael DeHaan

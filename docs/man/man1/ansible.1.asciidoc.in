@@ -102,7 +102,7 @@ Poll a background job every 'NUM' seconds. Requires *-B*.
 
 *-u* 'USERNAME', *--remote-user=*'USERNAME'::
 
-Use this remote 'USERNAME' instead of root.
+Use this remote 'USERNAME' instead of the current user.
 
 *-U* 'SUDO_USERNAME', *--sudo-user=*'SUDO_USERNAME'::
 
@@ -116,6 +116,10 @@ and 'local'.  'local' is mostly useful for crontab or kickstarts.
 *-l* 'SUBSET', *--limit=*'SUBSET'::
 
 Further limits the selected host/group patterns.
+
+*-l* '\~REGEX', *--limit=*'~REGEX'::
+
+Further limits hosts with a regex pattern.
 
 INVENTORY
 ---------
@@ -169,7 +173,7 @@ Ansible is released under the terms of the GPLv3 License.
 SEE ALSO
 --------
 
-*ansible-playbook*(1), *ansible-pull*(1)
+*ansible-playbook*(1), *ansible-pull*(1), *ansible-doc*(1)
 
 Extensive documentation as well as IRC and mailing list info
 is available on the ansible home page: <https://ansible.github.com/>

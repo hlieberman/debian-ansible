@@ -1,4 +1,4 @@
-# (c) 2012, Michael DeHaan <michael.dehaan@gmail.com>
+# (c) 2012-2013, Michael DeHaan <michael.dehaan@gmail.com>
 #
 # This file is part of Ansible
 #
@@ -20,9 +20,10 @@ from ansible import utils
 class ReturnData(object):
     ''' internal return class for runner execute methods, not part of public API signature '''
 
-    __slots__ = [ 'result', 'comm_ok', 'host' ]
+    __slots__ = [ 'result', 'comm_ok', 'host', 'diff' ]
 
-    def __init__(self, conn=None, host=None, result=None, comm_ok=True):
+    def __init__(self, conn=None, host=None, result=None, 
+        comm_ok=True, diff=dict()):
 
         # which host is this ReturnData about?
         if conn is not None:
@@ -37,6 +38,10 @@ class ReturnData(object):
 
         self.result = result
         self.comm_ok = comm_ok
+
+        # if these values are set and used with --diff we can show
+        # changes made to particular files
+        self.diff = diff
 
         if type(self.result) in [ str, unicode ]:
             self.result = utils.parse_json(self.result)

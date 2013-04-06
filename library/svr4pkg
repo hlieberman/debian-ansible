@@ -29,7 +29,7 @@ description:
       as a legacy feature in Solaris 11.
     - Note that this is a very basic packaging system. It will not enforce
       dependencies on install or remove.
-version_added: 0.9
+version_added: "0.9"
 author: Boyd Adamson
 options:
   name:
@@ -69,8 +69,8 @@ def package_installed(module, name):
     cmd = [module.get_bin_path('pkginfo', True)]
     cmd.append('-q')
     cmd.append(name)
-    res = subprocess.call(cmd)
-    if res == 0:
+    rc, out, err = module.run_command(' '.join(cmd), shell=False)
+    if rc == 0:
         return True
     else:
         return False
@@ -102,10 +102,7 @@ basedir=default
 def run_command(module, cmd):
     progname = cmd[0]
     cmd[0] = module.get_bin_path(progname, True)
-    p = subprocess.Popen(cmd, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    (out, err) = p.communicate()
-    rc = p.returncode
-    return (rc, out, err)
+    return module.run_command(cmd)
 
 def package_install(module, name, src, proxy):
     adminfile = create_admin_file()
@@ -131,8 +128,9 @@ def main():
             state = dict(required = True, choices=['present', 'absent']),
             src = dict(default = None),
             proxy = dict(default = None)
-            )
-        )
+        ),
+        supports_check_mode=True
+    )
     state = module.params['state']
     name = module.params['name']
     src = module.params['src']
@@ -149,6 +147,8 @@ def main():
             module.fail_json(name=name,
                              msg="src is required when state=present")
         if not package_installed(module, name):
+            if module.check_mode:
+                module.exit_json(changed=True)
             (rc, out, err) = package_install(module, name, src, proxy)
             # Stdout is normally empty but for some packages can be
             # very long and is not often useful
@@ -157,6 +157,8 @@ def main():
 
     elif state == 'absent':
         if package_installed(module, name):
+            if module.check_mode:
+                module.exit_json(changed=True)
             (rc, out, err) = package_uninstall(module, name, src)
             out = out[:75]
 

@@ -46,10 +46,17 @@ class ActionModule(object):
                        'delta': None,
                        }
 
-    def run(self, conn, tmp, module_name, module_args, inject):
-        ''' run the pause actionmodule '''
+    def run(self, conn, tmp, module_name, module_args, inject, complex_args=None, **kwargs):
+        ''' run the pause action module '''
+
+        # note: this module does not need to pay attention to the 'check'
+        # flag, it always runs
+
         hosts = ', '.join(self.runner.host_set)
-        args = parse_kv(template(self.runner.basedir, module_args, inject))
+        args = {}
+        if complex_args:
+            args.update(complex_args)
+        args.update(parse_kv(template(self.runner.basedir, module_args, inject)))
 
         # Are 'minutes' or 'seconds' keys that exist in 'args'?
         if 'minutes' in args or 'seconds' in args:

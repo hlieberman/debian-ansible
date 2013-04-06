@@ -16,14 +16,11 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
-import pwd
-import traceback
 import shlex
 
 import ansible.constants as C
 from ansible import utils
 from ansible import errors
-from ansible import module_common
 from ansible.runner.return_data import ReturnData
 
 class ActionModule(object):
@@ -31,11 +28,12 @@ class ActionModule(object):
     def __init__(self, runner):
         self.runner = runner
 
-    def run(self, conn, tmp, module_name, module_args, inject):
+    def run(self, conn, tmp, module_name, module_args, inject, complex_args=None, **kwargs):
         ''' handler for file transfer operations '''
 
-        # load up options
-        options = utils.parse_kv(module_args)
+        if self.runner.check:
+            # in check mode, always skip this module
+            return ReturnData(conn=conn, comm_ok=True, result=dict(skipped=True, msg='check mode not supported for this module'))
 
         tokens  = shlex.split(module_args)
         source  = tokens[0]
@@ -43,8 +41,6 @@ class ActionModule(object):
         args    = " ".join(tokens[1:])
         source  = utils.template(self.runner.basedir, source, inject)
         source  = utils.path_dwim(self.runner.basedir, source)
-
-        exec_rc = None
 
         # transfer the file to a remote tmp location
         source  = source.replace('\x00','') # why does this happen here?
@@ -56,12 +52,18 @@ class ActionModule(object):
 
         # fix file permissions when the copy is done as a different user
         if self.runner.sudo and self.runner.sudo_user != 'root':
-            self.runner._low_level_exec_command(conn, "chmod a+r %s" % tmp_src, tmp)
+            prepcmd = 'chmod a+rx %s' % tmp_src
+        else:
+            prepcmd = 'chmod +x %s' % tmp_src
 
-        # make executable
-        self.runner._low_level_exec_command(conn, "chmod +x %s" % tmp_src, tmp)
+        # add preparation steps to one ssh roundtrip executing the script
+        module_args = prepcmd + '; ' + tmp_src + ' ' + args
 
-        # run it through the command module
-        module_args = tmp_src + " " + args + " #USE_SHELL"
-        return self.runner._execute_module(conn, tmp, 'command', module_args, inject=inject)
+        handler = utils.plugins.action_loader.get('raw', self.runner)
+        result = handler.run(conn, tmp, 'raw', module_args, inject)
 
+        # clean up after
+        if tmp.find("tmp") != -1 and C.DEFAULT_KEEP_REMOTE_FILES != '1':
+            self.runner._low_level_exec_command(conn, 'rm -rf %s >/dev/null 2>&1' % tmp, tmp)
+
+        return result

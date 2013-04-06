@@ -1,6 +1,10 @@
 Ansible Modules
 ===============
 
+.. image:: http://ansible.cc/docs/_static/ansible_fest_2013.png
+   :alt: ansiblefest 2013
+   :target: http://ansibleworks.com/fest
+
 .. contents::
    :depth: 2
    :backlinks: top
@@ -43,6 +47,13 @@ not have to write modules in any particular language -- you get to choose.
 Modules are `idempotent`, meaning they will seek to avoid changes to the system unless a change needs to be made.  When using Ansible
 playbooks, these modules can trigger 'change events' in the form of notifying 'handlers'
 to run additional tasks.
+
+Documention for each module can be accessed from the command line with the
+ansible-doc as well as the man command::
+
+    ansible-doc command
+
+    man ansible.template
 
 Let's see what's available in the Ansible module library, out of the box:
 

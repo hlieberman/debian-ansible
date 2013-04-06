@@ -1,6 +1,11 @@
 Getting Started
 ===============
 
+.. image:: http://ansible.cc/docs/_static/ansible_fest_2013.png
+   :alt: ansiblefest 2013
+   :target: http://ansibleworks.com/fest
+
+
 .. contents::
    :depth: 2
    :backlinks: top
@@ -10,15 +15,21 @@ Requirements
 
 Requirements for Ansible are extremely minimal.
 
-Ansible is written for Python 2.6.  If you are running Python 2.5 on an "Enterprise Linux" variant,
-your distribution can easily install 2.6 (see instructions in the next section).  Newer versions
-of Linux and OS X should already have 2.6.
+Ansible is written for Python 2.6+.  If you are running Python 2.5 on an "Enterprise Linux" variant, we'll show you how to add
+2.6.  Newer versions of Linux and OS X should already have 2.6 or higher.
 
-In additon to Python 2.6, you will want the following packages:
+In additon to Python 2.6+, you will want the following Python modules (installed via pip or perhaps via your OS package manager via slightly different names):
 
 * ``paramiko``
 * ``PyYAML``
-* ``python-jinja2``
+* ``jinja2``
+
+If you are using RHEL or CentOS 5 , python is version 2.4 by default, but you can get python 2.6 installed easily. `Use EPEL <http://fedoraproject.org/wiki/EPEL>`_ and install these dependencies as follows:
+
+.. code-block:: bash
+
+   $ yum install python26 python26-PyYAML python26-paramiko python26-jinja2
+
 
 On the managed nodes, you only need Python 2.4 or later, but if you are are running less than Python 2.6 on them, you will
 also need:
@@ -28,22 +39,22 @@ also need:
 .. note::
 
    Ansible's "raw" module (for executing commands in a quick and dirty
-   way) and the copy module -- some of the most basic features in
-   ansible -- don't even need that.  So technically, you can use
+   way) and the script module don't even need that.  So technically, you can use
    Ansible to install python-simplejson using the raw module, which
    then allows you to use everything else.  (That's jumping ahead
    though.)
 
-Python 2.6 EPEL instructions for RHEL and CentOS 5
-``````````````````````````````````````````````````
+.. note::
 
-These distributions don't have Python 2.6 by default, but it is easily
-installable. If you have not already done so, `configure EPEL
-<http://fedoraproject.org/wiki/EPEL>`_
-
-.. code-block:: bash
-
-   $ yum install python26 python26-PyYAML python26-paramiko python26-jinja2
+   Python 3 is a slightly different language than Python 2 and most python programs (including
+   Ansible) are not
+   switching over yet.  However, some Linux distributions (Gentoo, Arch) may not have a 
+   Python 2.X interpreter installed by default.  On those systems, you should install one, and set
+   the 'ansible_python_interpreter' variable in inventory to point at your 2.X python.  Distributions
+   like Red Hat Enterprise Linux, CentOS, Fedora, and Ubuntu all have a 2.X interpreter installed
+   by default and this does not apply to those distributions.  This is also true of nearly all
+   Unix systems.  If you need to bootstrap these remote systems by installing Python 2.X, 
+   using the 'raw' module will be able to do it remotely.
 
 Getting Ansible
 ```````````````
@@ -82,6 +93,8 @@ You can optionally specify an inventory file (see :doc:`patterns`) other than /e
     $ echo "127.0.0.1" > ~/ansible_hosts
     $ export ANSIBLE_HOSTS=~/ansible_hosts
 
+You can read more about the inventory file in later parts of the manual.
+
 Now let's test things:
 
 .. code-block:: bash
@@ -101,6 +114,19 @@ using "make install".  This is done through `python-distutils`:
     $ cd ./ansible
     $ sudo make install
 
+Via Pip
++++++++
+
+Are you a python developer?
+
+Ansible can be installed via Pip, but when you do so, it will ask to install other dependencies used for
+optional modes::
+
+   $ sudo easy_install pip
+   $ sudo pip install ansible
+
+Readers that use virtualenv can also install Ansible under virtualenv.  Do not use easy_install to install
+ansible directly.
 
 Via RPM
 +++++++
@@ -110,13 +136,15 @@ RPMs for the last Ansible release are available for `EPEL
 Fedora distributions.  Ansible itself can manage earlier operating
 systems that contain python 2.4 or higher.
 
+If you are using RHEL or CentOS and have not already done so, `configure EPEL <http://fedoraproject.org/wiki/EPEL>`_
+   
 .. code-block:: bash
 
     # install the epel-release RPM if needed on CentOS, RHEL, or Scientific Linux
     $ sudo yum install ansible
 
-You can also use the ``make rpm`` command to build an RPM you can
-distribute and install:
+You can also use the ``make rpm`` command to build an RPM you can distribute and install. 
+Make sure you have ``rpm-build``, ``make``, and ``python2-devel`` installed.
 
 .. code-block:: bash
 
@@ -125,8 +153,42 @@ distribute and install:
     $ make rpm
     $ sudo rpm -Uvh ~/rpmbuild/ansible-*.noarch.rpm
 
-Debian, Gentoo, Arch, Others
-++++++++++++++++++++++++++++
+Python 2.6 EPEL instructions for RHEL and CentOS 5
+``````````````````````````````````````````````````
+
+These distributions don't have Python 2.6 by default, but it is easily
+installable. 
+
+
+.. code-block:: bash
+
+
+
+Via MacPorts
+++++++++++++
+
+An OSX port is available via MacPorts, to install the stable version of
+Ansible from MacPorts (this is the recommended way), run:
+
+.. code-block:: bash
+
+    $ sudo port install ansible
+
+If you wish to install the latest build via the MacPorts system from a
+git checkout, run:
+
+.. code-block:: bash
+
+    $ git clone git://github.com/ansible/ansible.git
+    $ cd ./ansible/packaging/macports
+    $ sudo port install
+
+Please refer to the documentation at <http://www.macports.org> for
+further information on using Portfiles with MacPorts.
+
+
+Ubuntu and Debian
++++++++++++++++++
 
 Ubuntu builds are available `in a PPA here <https://launchpad.net/~rquillo/+archive/ansible>`_
 
@@ -136,7 +198,15 @@ Debian/Ubuntu package recipes can also be built from the source checkout, run:
 
     $ make debian
 
-Gentoo eBuilds are available `on github here <https://github.com/uu/ubuilds>`_
+Gentoo, Arch, Others
+++++++++++++++++++++
+
+Gentoo eBuilds are in portage, version 1.0 `coming soon <https://bugs.gentoo.org/show_bug.cgi?id=461830>`_.
+
+.. code-block:: bash
+
+    $ emerge ansible
+
 
 An Arch PKGBUILD is available on `AUR <https://aur.archlinux.org/packages.php?ID=58621>`_
 If you have python3 installed on Arch, you probably want to symlink python to python2:
@@ -145,17 +215,17 @@ If you have python3 installed on Arch, you probably want to symlink python to py
 
     $ sudo ln -sf /usr/bin/python2 /usr/bin/python
 
-If you would like to package Ansible for Homebrew, BSD, or others,
-please stop by the mailing list and say hi!
-
+You should also set a 'ansible_python_interpreter' inventory variable for hosts that have python 
+pointing to python3, so the right python can be found on the managed nodes.
 
 Tagged Releases
 +++++++++++++++
 
-Tagged releases are available as tar.gz files from the Ansible github
-project page:
+Tarballs of releases are available on the ansible.cc page.
 
-* `Ansible/downloads <https://github.com/ansible/ansible/downloads>`_
+* `Ansible/downloads <https://ansible.cc/releases>`_
+
+These releases are also tagged in the git repository with the release version.
 
 Choosing Between Paramiko and Native SSH
 ````````````````````````````````````````
@@ -178,6 +248,7 @@ are roughly the same speed.  Without CM, the binary ssh transport is signficantl
 
 If none of this makes sense to you, the default paramiko option is probably fine.
 
+
 Your first commands
 ```````````````````
 
@@ -197,7 +268,7 @@ Set up SSH agent to avoid retyping passwords:
     $ ssh-agent bash
     $ ssh-add ~/.ssh/id_rsa
 
-(Depending on your setup, you may wish to ansible's --private-key-file option to specify a pem file instead)
+(Depending on your setup, you may wish to ansible's --private-key option to specify a pem file instead)
 
 Now ping all your nodes:
 
@@ -205,9 +276,8 @@ Now ping all your nodes:
 
    $ ansible all -m ping
 
-In Ansible 0.7 and later, ansible will attempt to remote connect to the machines using your current
-user name, just like SSH would.  In 0.6 and before, this actually defaults to 'root' (we liked the current
-user behavior better).  To override the remote user name, just use the '-u' parameter.
+Ansible will attempt to remote connect to the machines using your current
+user name, just like SSH would.  To override the remote user name, just use the '-u' parameter.
 
 If you would like to access sudo mode, there are also flags to do that:
 
@@ -219,6 +289,9 @@ If you would like to access sudo mode, there are also flags to do that:
     $ ansible all -m ping -u bruce --sudo 
     # as bruce, sudoing to batman
     $ ansible all -m ping -u bruce --sudo --sudo-user batman
+
+(The sudo implementation is changeable in ansbile's configuration file if you happen to want to use a sudo
+replacement.  Flags passed dot sudo can also be set.)
 
 Now run a live command on all of your nodes:
   
