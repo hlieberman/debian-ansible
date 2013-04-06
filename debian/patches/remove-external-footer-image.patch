@@ -1,0 +1,17 @@
+Description: Remove the link to the external image in footer
+ The link to http://ansible.cc/img/AnsibleWorks.png is on an external location
+ and may not be accessible, or may be used for tracking users activity without
+ their knowledge.
+Author: Janos Guljas <janos@debian.org>
+Last-Update: 2013-04-06
+
+--- a/docsite/_themes/bootstrap/layout.html
++++ b/docsite/_themes/bootstrap/layout.html
+@@ -119,7 +119,6 @@ $(window).ready(set_max_menu_height);
+ {%- block footer %}
+ <footer class="footer">
+ <center>
+-<a href="http://ansibleworks.com"><img src="http://ansible.cc/img/AnsibleWorks.png" alt="AnsibleWorks"></a>
+ <p>
+     {%- if show_copyright %}
+       {%- if hasdoc('copyright') %}

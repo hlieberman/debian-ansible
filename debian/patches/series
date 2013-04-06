@@ -1,2 +1,4 @@
 disable-google-analytics.patch
 remove-external-image.patch
+remove-external-footer-image.patch
+remove-external-training-references.patch

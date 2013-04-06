@@ -3,6 +3,11 @@ ansible (1.1+dfsg-1) UNRELEASED; urgency=low
   * New upstream release.
   * Update patches disable-google-analytics.patch and 
     remove-external-image.patch to apply cleanly.
+  * Add remove-external-footer-image.patch to remove link on external resource.
+  * Add remove-external-training-references.patch:
+    Training advertise contains links to external resources that may not be
+    available or may be used for tracking users activity without their
+    knowledge by the third-party.
 
  -- Janos Guljas <janos@debian.org>  Sat, 06 Apr 2013 21:21:24 +0200
 
