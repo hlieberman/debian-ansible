@@ -3,11 +3,11 @@ Description: Remove the link to the external image
  accessible. This image is not in the source package. The image is copied in
  build time from debian/missing-files directory.
 Author: Janos Guljas <janos@debian.org>
-Last-Update: 2013-01-22
+Last-Update: 2013-04-06
 
 --- a/docsite/rst/index.rst
 +++ b/docsite/rst/index.rst
-@@ -21,7 +21,7 @@ what sort of modules are available in An
+@@ -30,7 +30,7 @@ what sort of modules are available in An
  Overview
  ````````
  

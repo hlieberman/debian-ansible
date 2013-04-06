@@ -1,15 +1,14 @@
 Description: Remove JavaScript code that calls external Google Analytics service
  This code is used for tracking user's activity by the third-party service.
 Author: Janos Guljas <janos@debian.org>
-Last-Update: 2013-01-22
+Last-Update: 2013-04-06
 
 --- a/docsite/_themes/bootstrap/layout.html
 +++ b/docsite/_themes/bootstrap/layout.html
-@@ -82,23 +82,6 @@
- }());
+@@ -83,22 +83,6 @@
  </script>
  
--<script type="text/javascript">
+ <script type="text/javascript">
 -
 - var _gaq = _gaq || [];
 - _gaq.push(['_setAccount', 'UA-29861888-1']);
@@ -25,7 +24,7 @@ Last-Update: 2013-01-22
 - })();
 -
 -</script>
--
- {% endblock %}
- 
- {% block header %}{{ navBar() }}{% endblock %}
+-<script type="text/javascript">
+ // Set the maximum height of drop down menus to just less than the height
+ // of the viewport.
+ var set_max_menu_height = function () {

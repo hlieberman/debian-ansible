@@ -1,3 +1,11 @@
+ansible (1.1+dfsg-1) UNRELEASED; urgency=low
+
+  * New upstream release.
+  * Update patches disable-google-analytics.patch and 
+    remove-external-image.patch to apply cleanly.
+
+ -- Janos Guljas <janos@debian.org>  Sat, 06 Apr 2013 21:21:24 +0200
+
 ansible (0.9+dfsg-1) unstable; urgency=low
 
   * Initial release. (Closes: #698428)
