@@ -19,6 +19,12 @@ import os
 import time
 import json
 
+# NOTE: in Ansible 1.2 or later general logging is available without
+# this plugin, just set ANSIBLE_LOG_PATH as an environment variable
+# or log_path in the DEFAULTS section of your ansible configuration
+# file.  This callback is an example of per hosts logging for those
+# that want it.
+
 TIME_FORMAT="%b %d %Y %H:%M:%S"
 MSG_FORMAT="%(now)s - %(category)s - %(data)s\n\n"
 
@@ -82,6 +88,12 @@ class CallbackModule(object):
         pass
 
     def playbook_on_notify(self, host, handler):
+        pass
+
+    def playbook_on_no_hosts_matched(self):
+        pass
+
+    def playbook_on_no_hosts_remaining(self):
         pass
 
     def playbook_on_task_start(self, name, is_conditional):

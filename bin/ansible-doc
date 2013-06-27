@@ -86,6 +86,11 @@ def print_man(doc):
                             subsequent_indent=opt_indent)
 
 
+    if 'requirements' in doc and doc['requirements'] is not None and len(doc['requirements']) > 0:
+        req = ", ".join(doc['requirements'])
+        print "Requirements:%s\n" % textwrap.fill(tty_ify(req), initial_indent="  ",
+                            subsequent_indent=opt_indent)
+
     if 'examples' in doc and len(doc['examples']) > 0:
         print "Example%s:\n" % ('' if len(doc['examples']) < 2 else 's')
         for ex in doc['examples']:
@@ -93,6 +98,7 @@ def print_man(doc):
 
     if 'plainexamples' in doc and doc['plainexamples'] is not None:
         print doc['plainexamples']
+
 
 def print_snippet(doc):
 
@@ -155,6 +161,8 @@ def main():
                 continue
 
             filename = utils.plugins.module_finder.find_plugin(module)
+            if os.path.isdir(filename):
+                continue
             try:
                 doc, plainexamples = module_docs.get_docstring(filename)
                 desc = tty_ify(doc.get('short_description', '?'))
@@ -170,13 +178,23 @@ def main():
 
     if len(args) == 0:
         p.print_help()
-    
+   
+    def print_paths(finder):
+        ''' Returns a string suitable for printing of the search path '''
+
+        # Uses a list to get the order right
+        ret = []
+        for i in finder._get_paths():
+            if i not in ret:
+                ret.append(i)
+        return os.pathsep.join(ret)
+ 
     for module in args:
 
         filename = utils.plugins.module_finder.find_plugin(module)
         if filename is None:
             sys.stderr.write("module %s not found in %s\n" % (module,
-                    utils.plugins.module_finder.print_paths()))
+                    print_paths(utils.plugins.module_finder)))
             continue
 
         if any(filename.endswith(x) for x in BLACKLIST_EXTS):

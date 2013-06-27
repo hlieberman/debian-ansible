@@ -1,0 +1,260 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+# (c) 2013, James Martin <jmartin@basho.com>, Drew Kerrigan <dkerrigan@basho.com>
+#
+# This file is part of Ansible
+#
+# Ansible is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Ansible is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+#
+DOCUMENTATION = '''
+---
+module: riak
+short_description: This module handles some common Riak operations
+description:
+     - This module can be used to join nodes to a cluster, check
+       the status of the cluster.
+version_added: "1.2"
+options:
+  command:
+    description:
+      - The command you would like to perform against the cluster.
+    required: false
+    default: null
+    aliases: []
+    choices: ['ping', 'kv_test', 'join', 'plan', 'commit']
+  config_dir:
+    description:
+      - The path to the riak configuration directory
+    required: false
+    default: /etc/riak
+    aliases: []
+  http_conn:
+    description:
+      - The ip address and port that is listening for Riak HTTP queries
+    required: false
+    default: 127.0.0.1:8098
+    aliases: []
+  target_node:
+    description:
+      - The target node for certain operations (join, ping)
+    required: false
+    default: riak@127.0.0.1
+    aliases: []
+  wait_for_handoffs:
+    description:
+      - Number of seconds to wait for handoffs to complete.
+    required: false
+    default: null
+    aliases: []
+    type: 'int'
+  wait_for_ring:
+    description:
+      - Number of seconds to wait for all nodes to agree on the ring.
+    required: false
+    default: null
+    aliases: []
+    type: 'int'
+  wait_for_service:
+    description:
+      - Waits for a riak service to come online before continuing.
+    required: false
+    default: kv
+    aliases: []
+    choices: ['kv']
+examples:
+   - code: "riak: command=join target_node=riak@10.1.1.1"
+     description: "Join's a Riak node to another node"
+   - code: "riak: wait_for_handoffs=yes"
+     description: "Wait for handoffs to finish.  Use with async and poll."
+   - code: "riak: wait_for_service=kv"
+     description: "Wait for riak_kv service to startup"
+'''
+
+
+
+import re
+import os.path
+import urllib2
+import json
+import time
+
+
+def ring_check():
+    rc, out, err = module.run_command('riak-admin ringready 2> /dev/null')
+    if rc == 0 and out.find('TRUE All nodes agree on the ring') != -1:
+        return True
+    else:
+        return False
+
+def main():
+
+    ansible_facts = {}
+    arg_spec = dict(
+        command=dict(required=False, default=None, choices=[
+                    'ping', 'kv_test', 'join', 'plan', 'commit']),
+        config_dir=dict(default='/etc/riak'),
+        http_conn=dict(required=False, default='127.0.0.1:8098'),
+        target_node=dict(default='riak@127.0.0.1', required=False),
+        wait_for_handoffs=dict(default=False, type='int'),
+        wait_for_ring=dict(default=False, type='int'),
+        wait_for_service=dict(
+            required=False, default=None, choices=['kv'])
+    )
+    global module
+    module = AnsibleModule(argument_spec=arg_spec)
+
+
+    command = module.params.get('command')
+    config_dir = module.params.get('config_dir')
+    http_conn = module.params.get('http_conn')
+    target_node = module.params.get('target_node')
+    wait_for_handoffs = module.params.get('wait_for_handoffs')
+    wait_for_ring = module.params.get('wait_for_ring')
+    wait_for_service = module.params.get('wait_for_service')
+
+    rc = 0
+    err = ''
+    out = ''
+
+    #make sure riak commands are on the path
+    for item in ['riak', 'riak-admin']:
+        rc, out, err = module.run_command('which %s' % item)
+        if rc == 1:
+            module.fail_json(msg='Could not find path to %s executable' % item)
+
+    rc, out, err = module.run_command(
+        "riak version 2> /dev/null |grep ^riak|cut -f2 -d' '|tr -d '('")
+    if rc == 0:
+        version = out.strip()
+    else:
+        module.fail_json(msg='Could not determine Riak version')
+
+# here we attempt to get stats from the http stats interface for 120 seconds.
+    timeout = time.time() + 120
+    while True:
+        if time.time() > timeout:
+            module.fail_json(msg='Timeout, could not fetch Riak stats.')
+        try:
+            stats_raw = urllib2.urlopen(
+                'http://%s/stats' % (http_conn), None, 5).read()
+            break
+        except urllib2.HTTPError, e:
+            time.sleep(5)
+        except urllib2.URLError, e:
+            time.sleep(5)
+        except Exception, e:
+            module.fail_json(msg='Could not fetch Riak stats: %s' % e)
+
+
+# here we attempt to load those stats,
+    try:
+        stats = json.loads(stats_raw)
+    except:
+        module.fail_json(msg='Timeout, could not parse Riak stats.')
+
+    node_name = stats['nodename']
+    nodes = stats['ring_members']
+    ring_size = stats['ring_creation_size']
+
+
+    result = {'node_name': node_name,
+              'nodes': nodes,
+              'ring_size': ring_size,
+              'version': version}
+
+    if command == 'ping':
+        rc, out, err = module.run_command('riak ping %s' % target_node)
+        if rc == 0:
+            result['ping'] = out
+        else:
+            module.fail_json(msg=out)
+
+    elif command == 'kv_test':
+        rc, out, err = module.run_command('riak-admin test')
+        if rc == 0:
+            result['kv_test'] = out
+        else:
+            module.fail_json(msg=out)
+
+    elif command == 'join':
+        if nodes.count(node_name) == 1 and len(nodes) > 1:
+            result['join'] = 'Node is already in cluster or staged to be in cluster.'
+        else:
+            rc, out, err = module.run_command('riak-admin cluster join %s' % target_node)
+            if rc == 0:
+                result['join'] = out
+                result['changed'] = True
+            else:
+                module.fail_json(msg=out)
+
+    elif command == 'plan':
+        rc, out, err = module.run_command('riak-admin cluster plan %s' % target_node)
+        if rc == 0:
+            result['plan'] = out
+            if out.find('Staged Changes') != -1:
+                result['changed'] = True
+        else:
+            module.fail_json(msg=out)
+
+    elif command == 'commit':
+
+        rc, out, err = module.run_command('riak-admin cluster commit %s' % target_node)
+        if rc == 0:
+            result['commit'] = out
+            result['changed'] = True
+        else:
+            module.fail_json(msg=out)
+
+    rc = 0
+    err = ''
+    out = ''
+
+# this could take a while, recommend to run in async mode
+    if wait_for_handoffs:
+        timeout = time.time() + wait_for_handoffs
+        while True:
+            rc, out, err = module.run_command('riak-admin transfers 2> /dev/null')
+            if out.find('No transfers active') != -1:
+                result['handoffs'] = 'No transfers active.'
+                break
+            time.sleep(10)
+            if time.time() > timeout:
+                module.fail_json(msg='Timeout waiting for handoffs.')
+
+# this could take a while, recommend to run in async mode
+    if wait_for_service:
+        rc, out, err = module.run_command('riak-admin wait_for_service riak_%s %s' % (
+            wait_for_service, node_name))
+        result['service'] = out
+
+
+    if wait_for_ring:
+        timeout = time.time() + wait_for_ring
+        while True:
+            if ring_check():
+                break
+            time.sleep(10)
+            wait += 10
+        if time.time() > timeout:
+            module.fail_json(msg='Timeout waiting for nodes to agree on ring.')
+
+    result['ring_ready'] = ring_check()
+
+    module.exit_json(**result)
+
+# this is magic, see lib/ansible/module_common.py
+#<<INCLUDE_ANSIBLE_MODULE_COMMON>>
+
+main()

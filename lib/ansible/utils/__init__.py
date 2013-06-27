@@ -16,6 +16,7 @@
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
+import re
 import os
 import shlex
 import yaml
@@ -24,8 +25,8 @@ import optparse
 import operator
 from ansible import errors
 from ansible import __version__
-from ansible.utils.template import *
 from ansible.utils.plugins import *
+from ansible.utils import template
 import ansible.constants as C
 import time
 import StringIO
@@ -36,6 +37,8 @@ import pipes
 import random
 import difflib
 import warnings
+import traceback
+import getpass
 
 VERBOSITY=0
 
@@ -124,6 +127,9 @@ def jsonify(result, format=False):
     if result is None:
         return "{}"
     result2 = result.copy()
+    for key, value in result2.items():
+        if type(value) is str:
+            result2[key] = value.decode('utf-8', 'ignore')
     if format:
         return json.dumps(result2, sort_keys=True, indent=4)
     else:
@@ -154,16 +160,15 @@ def check_conditional(conditional):
     if not isinstance(conditional, basestring):
         return conditional
 
-    def is_set(var):
-        return not var.startswith("$")
-
-    def is_unset(var):
-        return var.startswith("$")
-
     try:
-        return eval(conditional.replace("\n", "\\n"))
+        conditional = conditional.replace("\n", "\\n")
+        result = safe_eval(conditional)
+        if result not in [ True, False ]:
+            raise errors.AnsibleError("Conditional expression must evaluate to True or False: %s" % conditional)
+        return result
+
     except (NameError, SyntaxError):
-        raise errors.AnsibleError("Could not evaluate the expression: " + conditional)
+        raise errors.AnsibleError("Could not evaluate the expression: (%s)" % conditional)
 
 def is_executable(path):
     '''is the given path executable?'''
@@ -190,11 +195,27 @@ def path_dwim(basedir, given):
     '''
 
     if given.startswith("/"):
-        return given
+        return os.path.abspath(given)
     elif given.startswith("~"):
-        return os.path.expanduser(given)
+        return os.path.abspath(os.path.expanduser(given))
     else:
-        return os.path.join(basedir, given)
+        return os.path.abspath(os.path.join(basedir, given))
+
+def path_dwim_relative(original, dirname, source, playbook_base, check=True):
+    ''' find one file in a directory one level up in a dir named dirname relative to current '''
+    # (used by roles code)
+
+    basedir = os.path.dirname(original)
+    template2 = os.path.join(basedir, '..', dirname, source)
+    source2 = path_dwim(basedir, template2)
+    if os.path.exists(source2):
+        return source2
+    obvious_local_path = path_dwim(playbook_base, source)
+    if os.path.exists(obvious_local_path):
+        return obvious_local_path
+    if check:
+        raise errors.AnsibleError("input file not found at %s or %s" % (source2, obvious_local_path))
+    return source2 # which does not exist
 
 def json_loads(data):
     ''' parse a JSON string and return a data structure '''
@@ -237,9 +258,31 @@ def parse_json(raw_data):
             return { "failed" : True, "parsed" : False, "msg" : orig_data }
         return results
 
+def smush_braces(data):
+    ''' smush Jinaj2 braces so unresolved templates like {{ foo }} don't get parsed weird by key=value code '''
+    while data.find('{{ ') != -1:
+        data = data.replace('{{ ', '{{')
+    while data.find(' }}') != -1:
+        data = data.replace(' }}', '}}')
+    return data
+
+def smush_ds(data):
+    # things like key={{ foo }} are not handled by shlex.split well, so preprocess any YAML we load
+    # so we do not have to call smush elsewhere
+    if type(data) == list:
+        return [ smush_ds(x) for x in data ]
+    elif type(data) == dict:
+        for (k,v) in data.items():
+            data[k] = smush_ds(v)
+        return data
+    elif isinstance(data, basestring):
+        return smush_braces(data)
+    else:
+        return data
+
 def parse_yaml(data):
     ''' convert a yaml string to a data structure '''
-    return yaml.safe_load(data)
+    return smush_ds(yaml.safe_load(data))
 
 def process_yaml_error(exc, data, path=None):
     if hasattr(exc, 'problem_mark'):
@@ -279,11 +322,12 @@ def parse_yaml_from_file(path):
 
 def parse_kv(args):
     ''' convert a string of key/value items to a dict '''
-
     options = {}
     if args is not None:
         # attempting to split a unicode here does bad things
-        vargs = shlex.split(str(args), posix=True)
+        args = args.encode('utf-8')
+        vargs = [x.decode('utf-8') for x in shlex.split(args, posix=True)]
+        #vargs = shlex.split(str(args), posix=True)
         for x in vargs:
             if x.find("=") != -1:
                 k, v = x.split("=",1)
@@ -300,7 +344,7 @@ def merge_hash(a, b):
     for k, v in b.iteritems():
         if k in a and isinstance(a[k], dict):
             # if this key is a hash and exists in a
-            # we recursively call ourselves with 
+            # we recursively call ourselves with
             # the key value of b
             a[k] = merge_hash(a[k], v)
         else:
@@ -478,6 +522,22 @@ def base_parser(constants=C, usage="", output_opts=False, runas_opts=False,
 
     return parser
 
+def ask_passwords(ask_pass=False, ask_sudo_pass=False):
+    sshpass = None
+    sudopass = None
+    sudo_prompt = "sudo password: "
+
+    if ask_pass:
+        sshpass = getpass.getpass(prompt="SSH password: ")
+        sudo_prompt = "sudo password [defaults to SSH password]: "
+
+    if ask_sudo_pass:
+        sudopass = getpass.getpass(prompt=sudo_prompt)
+        if ask_pass and sudopass == '':
+            sudopass = sshpass
+
+    return (sshpass, sudopass)
+
 def do_encrypt(result, encrypt, salt_size=None, salt=None):
     if PASSLIB_AVAILABLE:
         try:
@@ -544,6 +604,7 @@ def compile_when_to_only_if(expression):
     # when: int $x in $alist
     # when: float $x > 2 and $y <= $z
     # when: str $x != $y
+    # when: jinja2_compare asdf  # implies {{ asdf }} 
 
     if type(expression) not in [ str, unicode ]:
         raise errors.AnsibleError("invalid usage of when_ operator: %s" % expression)
@@ -561,8 +622,6 @@ def compile_when_to_only_if(expression):
                 tcopy[i] = t
         return " ".join(tcopy)
 
-
-
     # when_failed / when_changed
     elif tokens[0] in [ 'failed', 'changed' ]:
         tcopy = tokens[1:]
@@ -572,8 +631,6 @@ def compile_when_to_only_if(expression):
             else:
                 tcopy[i] = t
         return " ".join(tcopy)
-
-
 
     # when_integer / when_float / when_string
     elif tokens[0] in [ 'integer', 'float', 'string' ]:
@@ -586,12 +643,18 @@ def compile_when_to_only_if(expression):
             cast = 'float'
         tcopy = tokens[1:]
         for (i,t) in enumerate(tokens[1:]):
-            if t.find("$") != -1:
-                # final variable substitution will happen in Runner code
-                tcopy[i] = "%s('''%s''')" % (cast, t)
+            #if re.search(t, r"^\w"):
+                # bare word will turn into Jinja2 so all the above
+                # casting is really not needed
+                #tcopy[i] = "%s('''%s''')" % (cast, t)
+            t2 = t.strip()
+            if (t2[0].isalpha() or t2[0] == '$') and cast == 'str' and t2 != 'in':
+                tcopy[i] = "'%s'" % (t)
             else:
                 tcopy[i] = t
-        return " ".join(tcopy)
+        result = " ".join(tcopy)
+        return result
+
 
     # when_boolean
     elif tokens[0] in [ 'bool', 'boolean' ]:
@@ -601,6 +664,11 @@ def compile_when_to_only_if(expression):
                 tcopy[i] = "(is_set('''%s''') and '''%s'''.lower() not in ('false', 'no', 'n', 'none', '0', ''))" % (t, t)
         return " ".join(tcopy)
 
+    # the stock 'when' without qualification (new in 1.2), assumes Jinja2 terms
+    elif tokens[0] == 'jinja2_compare':
+        # a Jinja2 evaluation that results in something Python can eval!
+        presented = "{% if " + " ".join(tokens[1:]).strip() + " %} True {% else %} False {% endif %}"
+        return presented
     else:
         raise errors.AnsibleError("invalid usage of when_ operator: %s" % expression)
 
@@ -655,8 +723,78 @@ def get_diff(diff):
         return ">> the files are different, but the diff library cannot compare unicode strings"
 
 def is_list_of_strings(items):
-   for x in items: 
-       if not isinstance(x, basestring):
-           return False
-   return True
+    for x in items: 
+        if not isinstance(x, basestring):
+            return False
+    return True
+
+def safe_eval(str):
+    ''' 
+    this is intended for allowing things like:
+    with_items: {{ a_list_variable }}
+    where Jinja2 would return a string
+    but we do not want to allow it to call functions (outside of Jinja2, where
+    the env is constrained)
+    '''
+    # FIXME: is there a more native way to do this?
+    
+    def is_set(var):
+        return not var.startswith("$") and not '{{' in var
+
+    def is_unset(var):
+        return var.startswith("$") or '{{' in var
+
+    # do not allow method calls to modules
+    if not isinstance(str, basestring):
+        # already templated to a datastructure, perhaps?
+        return str
+    if re.search(r'\w\.\w+\(', str):
+        return str
+    # do not allow imports
+    if re.search(r'import \w+', str):
+        return str
+    try:
+        return eval(str)
+    except Exception, e:
+        return str
+
+
+def listify_lookup_plugin_terms(terms, basedir, inject):
+
+    if isinstance(terms, basestring):
+        # somewhat did:
+        #    with_items: alist
+        # OR
+        #    with_items: {{ alist }}
+
+        stripped = terms.strip()
+        if not (stripped.startswith('{') or stripped.startswith('[')) and not stripped.startswith("/"):
+            # if not already a list, get ready to evaluate with Jinja2
+            # not sure why the "/" is in above code :)
+            try:
+                new_terms = template.template(basedir, "{{ %s }}" % terms, inject)
+                if isinstance(new_terms, basestring) and new_terms.find("{{") != -1:
+                    pass
+                else:
+                    terms = new_terms  
+            except:
+                pass
+
+        if '{' in terms or '[' in terms:
+            # Jinja2 already evaluated a variable to a list.
+            # Jinja2-ified list needs to be converted back to a real type
+            # TODO: something a bit less heavy than eval
+            return safe_eval(terms)
+
+        if isinstance(terms, basestring):
+            terms = [ terms ]
+
+    return terms
+
+def combine_vars(a, b):
+    if C.DEFAULT_HASH_BEHAVIOUR == "merge":
+        return merge_hash(a, b)
+    else:
+        return dict(a.items() + b.items())
+
 
