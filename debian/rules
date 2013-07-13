@@ -9,7 +9,7 @@ override_dh_fixperms:
 
 override_dh_auto_build:
 	dh_auto_build
-	cp -a docsite html
+	cp -a docsite/latest html
 	cp debian/missing-files/ansible_arch.png html
 	PYTHONPATH=../lib make docs -C html
 	rm -rf html/.gitignore \
@@ -34,8 +34,8 @@ get-orig-source:
 	rm -rf ansible-$(DEB_UPSTREAM_VERSION)
 	tar -xf ansible_$(DEB_UPSTREAM_VERSION).orig.tar.gz
 	rm ansible_$(DEB_UPSTREAM_VERSION).orig.tar.gz
-	rm ansible-$(DEB_UPSTREAM_VERSION)/docsite/_static/jquery.js
-	rm ansible-$(DEB_UPSTREAM_VERSION)/docsite/_static/underscore.js
+	rm ansible-$(DEB_UPSTREAM_VERSION)/docsite/latest/_static/jquery.js
+	rm ansible-$(DEB_UPSTREAM_VERSION)/docsite/latest/_static/underscore.js
 	GZIP=--best tar -cz --owner root --group root --mode a+rX \
 		-f ansible_$(DEB_UPSTREAM_VERSION)+dfsg.orig.tar.gz \
 		ansible-$(DEB_UPSTREAM_VERSION)
