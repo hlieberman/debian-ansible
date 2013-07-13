@@ -27,6 +27,7 @@ class TestRunner(unittest.TestCase):
     def setUp(self):
         self.user = getpass.getuser()
         self.runner = ansible.runner.Runner(
+            basedir='test/',
             module_name='ping',
             module_path='library/',
             module_args='',
@@ -63,19 +64,25 @@ class TestRunner(unittest.TestCase):
         filename = os.path.join(self.stage_dir, filename)
         return filename
 
-    def _run(self, module_name, module_args, background=0):
+    def _run(self, module_name, module_args, background=0, check_mode=False):
         ''' run a module and get the localhost results '''
         self.runner.module_name = module_name
         args = ' '.join(module_args)
-        print "DEBUG: using args=%s" % args
         self.runner.module_args = args
         self.runner.background = background
+        self.runner.check = check_mode
         results = self.runner.run()
         # when using nosetests this will only show up on failure
         # which is pretty useful
         print "RESULTS=%s" % results
         assert "localhost" in results['contacted']
         return results['contacted']['localhost']
+
+    def test_action_plugins(self):
+        result = self._run("uncategorized_plugin", [])
+        assert result.get("msg") == "uncategorized"
+        result = self._run("categorized_plugin", [])
+        assert result.get("msg") == "categorized"
 
     def test_ping(self):
         result = self._run('ping', [])
@@ -117,6 +124,12 @@ class TestRunner(unittest.TestCase):
             "src=%s" % input_,
             "dest=%s" % output,
         ])
+        assert result['changed'] is False
+        with open(output, "a") as output_stream:
+            output_stream.write("output file now differs from input")
+        result = self._run('copy',
+                           ["src=%s" % input_, "dest=%s" % output, "force=no"],
+                           check_mode=True)
         assert result['changed'] is False
 
     def test_command(self):
@@ -224,6 +237,14 @@ class TestRunner(unittest.TestCase):
         assert self._run('file', ['dest=' + filedemo, 'state=absent'])['changed']
         assert not os.path.exists(filedemo)
         assert not self._run('file', ['dest=' + filedemo, 'state=absent'])['changed']
+
+        # Make sure that we can deal safely with bad symlinks
+        os.symlink('/tmp/non_existent_target', filedemo)
+        assert self._run('file', ['dest=' + tmp_dir, 'state=directory recurse=yes mode=701'])['changed']
+        assert not self._run('file', ['dest=' + tmp_dir, 'state=directory', 'recurse=yes', 'owner=' + str(os.getuid())])['changed']
+        assert os.path.islink(filedemo)
+        assert self._run('file', ['dest=' + filedemo, 'state=absent'])['changed']
+        assert not os.path.exists(filedemo)
         os.rmdir(tmp_dir)
 
     def test_large_output(self):
@@ -290,7 +311,7 @@ class TestRunner(unittest.TestCase):
         assert result['changed'] is False
 
     def test_lineinfile(self):
-        """Unit tests for the lineinfile module, without backref features."""
+        # Unit tests for the lineinfile module, without backref features.
         sampleroot = 'rocannon'
         sample_origin = self._get_test_file(sampleroot + '.txt')
         sample = self._get_stage_file(sampleroot + '.out' + '.txt')
@@ -447,7 +468,7 @@ class TestRunner(unittest.TestCase):
         os.unlink(sample)
 
     def test_lineinfile_backrefs(self):
-        """Unit tests for the lineinfile module, with backref features."""
+        # Unit tests for the lineinfile module, with backref features.
         sampleroot = 'rocannon'
         sample_origin = self._get_test_file(sampleroot + '.txt')
         origin_lines = [line.strip() for line in open(sample_origin)]
@@ -456,7 +477,7 @@ class TestRunner(unittest.TestCase):
         # The order of the test cases is important
 
         # The regexp doesn't match, so the line will not be added anywhere.
-        testline = r'\\1: Line added by default at the end of the file.'
+        testline = r'\1: Line added by default at the end of the file.'
         testcase = ('lineinfile', [
                     "dest=%s" % sample,
                     "regexp='^(First): '",
@@ -471,7 +492,7 @@ class TestRunner(unittest.TestCase):
 
         # insertafter with EOF
         # The regexp doesn't match, so the line will not be added anywhere.
-        testline = r'\\1: Line added with insertafter=EOF'
+        testline = r'\1: Line added with insertafter=EOF'
         testcase = ('lineinfile', [
                     "dest=%s" % sample,
                     "insertafter=EOF",
@@ -487,7 +508,7 @@ class TestRunner(unittest.TestCase):
 
         # with invalid insertafter regex
         # The regexp doesn't match, so do nothing.
-        testline = r'\\1: Line added with an invalid insertafter regex'
+        testline = r'\1: Line added with an invalid insertafter regex'
         testcase = ('lineinfile', [
                     "dest=%s" % sample,
                     "insertafter='^abcdefgh'",
@@ -501,7 +522,7 @@ class TestRunner(unittest.TestCase):
 
         # with an insertafter regex
         # The regexp doesn't match, so do nothing.
-        testline = r'\\1: Line added with a valid insertafter regex'
+        testline = r'\1: Line added with a valid insertafter regex'
         testcase = ('lineinfile', [
                     "dest=%s" % sample,
                     "insertafter='^receive messages to '",
@@ -520,7 +541,7 @@ class TestRunner(unittest.TestCase):
         target_line = 'combination of microphone, speaker, keyboard and display. It can send and'
         idx = artifact.index(target_line)
 
-        testline = r'\\1 of megaphone'
+        testline = r'\1 of megaphone'
         testline_after = 'combination of megaphone'
         testcase = ('lineinfile', [
                     "dest=%s" % sample,
@@ -537,7 +558,7 @@ class TestRunner(unittest.TestCase):
         assert target_line not in artifact
 
         # Go again, should be unchanged now.
-        testline = r'\\1 of megaphone'
+        testline = r'\1 of megaphone'
         testline_after = 'combination of megaphone'
         testcase = ('lineinfile', [
                     "dest=%s" % sample,
@@ -553,11 +574,11 @@ class TestRunner(unittest.TestCase):
         f = open(sample, 'a+')
         f.write("1 + 1 = 3" + os.linesep)
         f.close()
-        testline = r"2 + \\g<num> = 3"
+        testline = r"2 + \g<num> = 3"
         testline_after = "2 + 1 = 3"
         testcase = ('lineinfile', [
                     "dest=%s" % sample,
-                    r"regexp='1 \\+ (?P<num>\\d) = 3'",
+                    r"regexp='1 \+ (?P<num>\d) = 3'",
                     "line='%s'" % testline,
                     "backrefs=yes",
                     ])

@@ -23,6 +23,7 @@ import pipes
 import random
 import select
 import fcntl
+import pwd
 import ansible.constants as C
 from ansible.callbacks import vvv
 from ansible import errors
@@ -31,12 +32,13 @@ from ansible import utils
 class Connection(object):
     ''' ssh based connections '''
 
-    def __init__(self, runner, host, port, user, password):
+    def __init__(self, runner, host, port, user, password, private_key_file, *args, **kwargs):
         self.runner = runner
         self.host = host
         self.port = port
         self.user = user
         self.password = password
+        self.private_key_file = private_key_file
 
     def connect(self):
         ''' connect to the remote host '''
@@ -51,10 +53,15 @@ class Connection(object):
             self.common_args += ["-o", "ControlMaster=auto",
                                  "-o", "ControlPersist=60s",
                                  "-o", "ControlPath=/tmp/ansible-ssh-%h-%p-%r"]
-        self.common_args += ["-o", "StrictHostKeyChecking=no"]
+
+        if not C.HOST_KEY_CHECKING:
+            self.common_args += ["-o", "StrictHostKeyChecking=no"]
+
         if self.port is not None:
             self.common_args += ["-o", "Port=%d" % (self.port)]
-        if self.runner.private_key_file is not None:
+        if self.private_key_file is not None:
+            self.common_args += ["-o", "IdentityFile="+os.path.expanduser(self.private_key_file)]
+        elif self.runner.private_key_file is not None:
             self.common_args += ["-o", "IdentityFile="+os.path.expanduser(self.runner.private_key_file)]
         if self.password:
             self.common_args += ["-o", "GSSAPIAuthentication=no",
@@ -62,7 +69,8 @@ class Connection(object):
         else:
             self.common_args += ["-o", "KbdInteractiveAuthentication=no",
                                  "-o", "PasswordAuthentication=no"]
-        self.common_args += ["-o", "User="+self.user]
+        if self.user != pwd.getpwuid(os.geteuid())[0]:
+            self.common_args += ["-o", "User="+self.user]
         self.common_args += ["-o", "ConnectTimeout=%d" % self.runner.timeout]
 
         return self
@@ -85,6 +93,22 @@ class Connection(object):
             os.write(self.wfd, "%s\n" % self.password)
             os.close(self.wfd)
 
+    def not_in_host_file(self, host):
+        host_file = os.path.expanduser("~/.ssh/known_hosts")
+        if not os.path.exists(host_file):
+            print "previous known host file not found"
+            return True
+        host_fh = open(host_file)
+        data = host_fh.read()
+        host_fh.close()
+        for line in data.split("\n"):
+            if line is None or line.find(" ") == -1:
+                continue
+            tokens = line.split()
+            if host in tokens[0]:
+                return False
+        return True
+
     def exec_command(self, cmd, tmp_path, sudo_user,sudoable=False, executable='/bin/sh'):
         ''' run a command on the remote host '''
 
@@ -101,6 +125,17 @@ class Connection(object):
             ssh_cmd.append(sudocmd)
 
         vvv("EXEC %s" % ssh_cmd, host=self.host)
+
+        not_in_host_file = self.not_in_host_file(self.host)
+
+        if C.HOST_KEY_CHECKING and not_in_host_file:
+            # lock around the initial SSH connectivity so the user prompt about whether to add 
+            # the host to known hosts is not intermingled with multiprocess output.
+            fcntl.lockf(self.runner.process_lockfile, fcntl.LOCK_EX)
+            fcntl.lockf(self.runner.output_lockfile, fcntl.LOCK_EX)
+        
+
+
         try:
             # Make sure stdin is a proper (pseudo) pty to avoid: tcgetattr errors
             import pty
@@ -153,6 +188,12 @@ class Connection(object):
             elif p.poll() is not None:
                 break
         stdin.close() # close stdin after we read from stdout (see also issue #848)
+        
+        if C.HOST_KEY_CHECKING and not_in_host_file:
+            # lock around the initial SSH connectivity so the user prompt about whether to add 
+            # the host to known hosts is not intermingled with multiprocess output.
+            fcntl.lockf(self.runner.output_lockfile, fcntl.LOCK_UN)
+            fcntl.lockf(self.runner.process_lockfile, fcntl.LOCK_UN)
 
         if p.returncode != 0 and stderr.find('Bad configuration option: ControlPersist') != -1:
             raise errors.AnsibleError('using -c ssh on certain older ssh versions may not support ControlPersist, set ANSIBLE_SSH_ARGS="" (or ansible_ssh_args in the config file) before running again')

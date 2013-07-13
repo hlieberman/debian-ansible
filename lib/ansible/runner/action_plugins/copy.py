@@ -18,6 +18,7 @@
 import os
 
 from ansible import utils
+import ansible.utils.template as template
 from ansible import errors
 from ansible.runner.return_data import ReturnData
 import base64
@@ -41,6 +42,7 @@ class ActionModule(object):
         source  = options.get('src', None)
         content = options.get('content', None)
         dest    = options.get('dest', None)
+        force   = utils.boolean(options.get('force', 'yes'))
 
         if (source is None and content is None and not 'first_available_file' in inject) or dest is None:
             result=dict(failed=True, msg="src (or content) and dest are required")
@@ -54,10 +56,13 @@ class ActionModule(object):
         if 'first_available_file' in inject:
             found = False
             for fn in inject.get('first_available_file'):
-                fn = utils.template(self.runner.basedir, fn, inject)
-                fn = utils.path_dwim(self.runner.basedir, fn)
-                if os.path.exists(fn):
-                    source = fn
+                fn_orig = fn
+                fnt = template.template(self.runner.basedir, fn, inject)
+                fnd = utils.path_dwim(self.runner.basedir, fnt)
+                if not os.path.exists(fnd) and '_original_file' in inject:
+                    fnd = utils.path_dwim_relative(inject['_original_file'], 'files', fnt, self.runner.basedir, check=False)
+                if os.path.exists(fnd):
+                    source = fnd
                     found = True
                     break
             if not found:
@@ -75,8 +80,12 @@ class ActionModule(object):
             f.close()
             source = tmp_content
         else:
-            source = utils.template(self.runner.basedir, source, inject)
-            source = utils.path_dwim(self.runner.basedir, source)
+            source = template.template(self.runner.basedir, source, inject)
+            if '_original_file' in inject:
+                source = utils.path_dwim_relative(inject['_original_file'], 'files', source, self.runner.basedir)
+            else:
+                source = utils.path_dwim(self.runner.basedir, source)
+
 
         local_md5 = utils.md5(source)
         if local_md5 is None:
@@ -96,6 +105,10 @@ class ActionModule(object):
                 return ReturnData(conn=conn, result=result)
             dest = os.path.join(dest, os.path.basename(source))
             remote_md5 = self.runner._remote_md5(conn, tmp, dest)
+
+        # remote_md5 == '1' would mean that the file does not exist.
+        if remote_md5 != '1' and not force:
+            return ReturnData(conn=conn, result=dict(changed=False))
 
         exec_rc = None
         if local_md5 != remote_md5:

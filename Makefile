@@ -52,19 +52,21 @@ endif
 # RPM build parameters
 RPMSPECDIR= packaging/rpm
 RPMSPEC = $(RPMSPECDIR)/ansible.spec
-RPMDIST = $(shell rpm --eval '%dist')
+RPMDIST = $(shell rpm --eval '%{?dist}')
 RPMRELEASE = 1
 ifeq ($(OFFICIAL),)
     RPMRELEASE = 0.git$(DATE)
 endif
 RPMNVR = "$(NAME)-$(VERSION)-$(RPMRELEASE)$(RPMDIST)"
 
+NOSETESTS := nosetests
+
 ########################################################
 
 all: clean python
 
 tests:
-	PYTHONPATH=./lib nosetests -d -v
+	PYTHONPATH=./lib $(NOSETESTS) -d -v
 
 # To force a rebuild of the docs run 'touch VERSION && make docs'
 docs: $(MANPAGES) modulepages
@@ -175,22 +177,10 @@ deb: debian
 # for arch or gentoo, read instructions in the appropriate 'packaging' subdirectory directory
 
 modulepages:
-	PYTHONPATH=./lib $(PYTHON) hacking/module_formatter.py -A $(VERSION) -t man -o docs/man/man3/ --module-dir=library --template-dir=hacking/templates
-
-modulejson:
-	mkdir -p docs/json
-	PYTHONPATH=./lib $(PYTHON) hacking/module_formatter.py -A $(VERSION) -t json -o docs/json --module-dir=library --template-dir=hacking/templates
-
-modulejs:
-	mkdir -p docs/js
-	make modulejson
-	PYTHONPATH=./lib $(PYTHON) hacking/module_formatter.py -A $(VERSION) -t js -o docs/js --module-dir=docs/json --template-dir=hacking/templates
+	PYTHONPATH=./lib $(PYTHON) hacking/module_formatter.py -A $(VERSION) -t man -o docs/man/man3/ --module-dir=library --template-dir=hacking/templates # --verbose
 
 # because this requires Sphinx it is not run as part of every build, those building the RPM and so on can ignore this
 
 webdocs:
-	(cd docsite; make docs)
+	(cd docsite/latest; make docs)
 
-# just for quick testing of all the module docs
-webdocs2:
-	(cd docsite; make modules)

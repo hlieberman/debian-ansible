@@ -32,13 +32,21 @@ class ActionModule(object):
         args = {}
         if complex_args:
             args.update(complex_args)
-        args.update(utils.parse_kv(module_args))
+
+        # attempt to prevent confusing messages when the variable didn't interpolate
+        module_args = module_args.replace("{{ ","{{").replace(" }}","}}")
+
+        kv = utils.parse_kv(module_args)
+        args.update(kv)
         if not 'msg' in args:
             args['msg'] = 'Hello world!'
 
         if 'fail' in args and utils.boolean(args['fail']):
             result = dict(failed=True, msg=args['msg'])
         else:
-            result = dict(msg=str(args['msg']))
+            result = dict(msg=args['msg'])
+
+        # force flag to make debug output module always verbose
+        result['verbose_always'] = True
 
         return ReturnData(conn=conn, result=result)

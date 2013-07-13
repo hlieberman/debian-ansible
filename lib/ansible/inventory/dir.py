@@ -36,8 +36,20 @@ class InventoryDirectory(object):
         self.parsers = []
         self.hosts = {}
         self.groups = {}
+ 
         for i in self.names:
+            
             if i.endswith("~") or i.endswith(".orig") or i.endswith(".bak"):
+                continue
+            if i.endswith(".ini"):
+                # configuration file for an inventory script
+                continue
+            if i.endswith(".retry"):
+                # this file is generated on a failed playbook and should only be
+                # used when run specifically
+                continue
+            # Skip hidden files
+            if i.startswith('.') and not i.startswith('./'):
                 continue
             # These are things inside of an inventory basedir
             if i in ("host_vars", "group_vars", "vars_plugins"):
@@ -53,15 +65,22 @@ class InventoryDirectory(object):
             # This takes a lot of code because we can't directly use any of the objects, as they have to blend
             for name, group in parser.groups.iteritems():
                 if name not in self.groups:
-                    self.groups[name] = Group(name)
-                for k, v in group.get_variables().iteritems():
-                    self.groups[name].set_variable(k, v)
+                    self.groups[name] = group
+                else:
+                    # group is already there, copy variables
+                    # note: depth numbers on duplicates may be bogus
+                    for k, v in group.get_variables().iteritems():
+                        self.groups[name].set_variable(k, v)
                 for host in group.get_hosts():
                     if host.name not in self.hosts:
-                        self.hosts[host.name] = Host(host.name)
-                    for k, v in host.vars.iteritems():
-                        self.hosts[host.name].set_variable(k, v)
+                        self.hosts[host.name] = host
+                    else:
+                        # host is already there, copy variables
+                        # note: depth numbers on duplicates may be bogus
+                        for k, v in host.vars.iteritems():
+                            self.hosts[host.name].set_variable(k, v)
                     self.groups[name].add_host(self.hosts[host.name])
+
             # This needs to be a second loop to ensure all the parent groups exist
             for name, group in parser.groups.iteritems():
                 for ancestor in group.get_ancestors():
