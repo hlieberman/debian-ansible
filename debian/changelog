@@ -1,6 +1,7 @@
 ansible (1.2.1+dfsg-1) unstable; urgency=low
 
-  * new upstream version
+  * New upstream release.
+  * Drop remove-external-training-references.patch
 
  -- Michael Vogt <mvo@debian.org>  Sat, 13 Jul 2013 21:40:49 +0200
 

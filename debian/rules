@@ -4,13 +4,13 @@
 	dh $@ --with python2 -Spython_distutils
 
 override_dh_fixperms:
-	chmod +x `grep '^#!' debian/ansible/usr/share/ansible/* -n | grep ':1:' | cut -d: -f 1`
+	chmod +x `grep '^#!' debian/ansible/usr/share/ansible/*/* -n | grep ':1:' | cut -d: -f 1`
 	dh_fixperms
 
 override_dh_auto_build:
 	dh_auto_build
 	cp -a docsite/latest html
-	cp debian/missing-files/ansible_arch.png html
+	cp debian/missing-files/*.jpg html
 	PYTHONPATH=../lib make docs -C html
 	rm -rf html/.gitignore \
 	    html/_themes \
