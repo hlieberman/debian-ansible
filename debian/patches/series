@@ -2,3 +2,4 @@ fix-html-makefile
 disable-google-analytics.patch
 remove-external-image.patch
 remove-external-footer-image.patch
+fix-ansible-cfg
