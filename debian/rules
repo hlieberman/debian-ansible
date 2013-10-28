@@ -9,17 +9,12 @@ override_dh_fixperms:
 
 override_dh_auto_build:
 	dh_auto_build
-	cp -a docsite/latest html
-	cp debian/missing-files/*.jpg html
-	PYTHONPATH=../lib make docs -C html
-	rm -rf html/.gitignore \
-	    html/_themes \
-	    html/rst \
-	    html/*.png \
-	    html/*.jpg \
-	    html/*.py \
-	    html/Makefile \
-	    html/.buildinfo
+	cp -a docsite/latest docbuild
+	cp debian/missing-files/*.jpg docbuild
+	PYTHONPATH=../lib make docs -C docbuild
+	mv docbuild/htmlout html
+	cp -r docbuild/man html/
+	rm -rf docbuild
 
 override_dh_auto_clean:
 	rm -rf html
