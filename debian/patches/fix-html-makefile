@@ -1,3 +1,5 @@
+Description: Fix path error in makefile.
+Author: Michael Vogt <mvo@debian.org>
 Index: ansible/docsite/latest/Makefile
 ===================================================================
 --- ansible.orig/docsite/latest/Makefile	2013-07-13 22:20:06.664305826 +0200
