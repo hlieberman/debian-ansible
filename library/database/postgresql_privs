@@ -136,7 +136,7 @@ EXAMPLES = """
 # On database "library":
 # GRANT SELECT, INSERT, UPDATE ON TABLE public.books, public.authors 
 # TO librarian, reader WITH GRANT OPTION
-postgresql_privs: >
+- postgresql_privs: >
     database=library
     state=present
     privs=SELECT,INSERT,UPDATE
@@ -147,7 +147,7 @@ postgresql_privs: >
     grant_option=yes
 
 # Same as above leveraging default values:
-postgresql_privs: >
+- postgresql_privs: >
     db=library
     privs=SELECT,INSERT,UPDATE
     objs=books,authors
@@ -157,7 +157,7 @@ postgresql_privs: >
 # REVOKE GRANT OPTION FOR INSERT ON TABLE books FROM reader 
 # Note that role "reader" will be *granted* INSERT privilege itself if this 
 # isn't already the case (since state=present).
-postgresql_privs: >
+- postgresql_privs: >
     db=library
     state=present
     priv=INSERT
@@ -167,7 +167,7 @@ postgresql_privs: >
 
 # REVOKE INSERT, UPDATE ON ALL TABLES IN SCHEMA public FROM reader
 # "public" is the default schema. This also works for PostgreSQL 8.x.
-postgresql_privs: >
+- postgresql_privs: >
     db=library
     state=absent
     privs=INSERT,UPDATE
@@ -175,7 +175,7 @@ postgresql_privs: >
     role=reader
 
 # GRANT ALL PRIVILEGES ON SCHEMA public, math TO librarian
-postgresql_privs: >
+- postgresql_privs: >
     db=library
     privs=ALL
     type=schema
@@ -184,7 +184,7 @@ postgresql_privs: >
 
 # GRANT ALL PRIVILEGES ON FUNCTION math.add(int, int) TO librarian, reader
 # Note the separation of arguments with colons.
-postgresql_privs: >
+- postgresql_privs: >
     db=library
     privs=ALL
     type=function
@@ -195,7 +195,7 @@ postgresql_privs: >
 # GRANT librarian, reader TO alice, bob WITH ADMIN OPTION
 # Note that group role memberships apply cluster-wide and therefore are not
 # restricted to database "library" here.
-postgresql_privs: >
+- postgresql_privs: >
     db=library
     type=group
     objs=librarian,reader
@@ -205,7 +205,7 @@ postgresql_privs: >
 # GRANT ALL PRIVILEGES ON DATABASE library TO librarian
 # Note that here "db=postgres" specifies the database to connect to, not the
 # database to grant privileges on (which is specified via the "objs" param)
-postgresql_privs: >
+- postgresql_privs: >
     db=postgres
     privs=ALL
     type=database
@@ -215,7 +215,7 @@ postgresql_privs: >
 # GRANT ALL PRIVILEGES ON DATABASE library TO librarian
 # If objs is omitted for type "database", it defaults to the database 
 # to which the connection is established
-postgresql_privs: >
+- postgresql_privs: >
     db=library
     privs=ALL
     type=database
@@ -249,12 +249,21 @@ def partial(f, *args, **kwargs):
 class Connection(object):
     """Wrapper around a psycopg2 connection with some convenience methods"""
 
-    def __init__(self, host, port, login, password, database):
-        self.database = database
-        self.connection = psycopg2.connect(
-            host=host, port=port, user=login,
-            password=password, database=database
-        )
+    def __init__(self, params):
+        self.database = params.database
+        # To use defaults values, keyword arguments must be absent, so
+        # check which values are empty and don't include in the **kw
+        # dictionary
+        params_map = {
+            "host":"host",
+            "login":"user",
+            "password":"password",
+            "port":"port",
+            "database": "database",
+        }
+        kw = dict( (params_map[k], getattr(params, k)) for k in params_map
+                   if getattr(params, k) != '' )
+        self.connection = psycopg2.connect(**kw)
         self.cursor = self.connection.cursor()
 
 
@@ -503,10 +512,10 @@ def main():
             roles=dict(required=True, aliases=['role']),
             grant_option=dict(required=False, type='bool', 
                               aliases=['admin_option']),
-            host=dict(required=False, aliases=['login_host']),
+            host=dict(default='', aliases=['login_host']),
             port=dict(type='int', default=5432),
             login=dict(default='postgres', aliases=['login_user']),
-            password=dict(required=False, aliases=['login_password'])
+            password=dict(default='', aliases=['login_password'])
         ),
         supports_check_mode = True
     )
@@ -541,7 +550,7 @@ def main():
     if not psycopg2:
         module.fail_json(msg='Python module "psycopg2" must be installed.')
     try:
-        conn = Connection(p.host, p.port, p.login, p.password, p.database)
+        conn = Connection(p)
     except psycopg2.Error, e:
         module.fail_json(msg='Could not connect to database: %s' % e)
 
