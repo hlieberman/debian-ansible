@@ -1,0 +1,11 @@
+Description: Change shebang to python, instead of python2
+Author: Harlan Lieberman-Berg <H.LiebermanBerg@gmail.com>
+Forwarded: not-needed
+--- a/library/packaging/rpm_key
++++ b/library/packaging/rpm_key
+@@ -1,4 +1,4 @@
+-#!/usr/bin/python2
++#!/usr/bin/python
+ # -*- coding: utf-8 -*-
+ 
+ """
