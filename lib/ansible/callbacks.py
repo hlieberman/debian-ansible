@@ -41,15 +41,17 @@ if constants.DEFAULT_LOG_PATH != '':
     user = getpass.getuser()
     logger = logging.getLogger("p=%s u=%s | " % (mypid, user))
 
-callback_plugins = [x for x in utils.plugins.callback_loader.all()]
+callback_plugins = []
+
+def load_callback_plugins():
+    global callback_plugins
+    callback_plugins = [x for x in utils.plugins.callback_loader.all()]
 
 def get_cowsay_info():
-    if constants.ANSIBLE_NOCOWS is not None:
+    if constants.ANSIBLE_NOCOWS:
         return (None, None)
     cowsay = None
-    if os.getenv("ANSIBLE_NOCOWS") is not None:
-        cowsay = None
-    elif os.path.exists("/usr/bin/cowsay"):
+    if os.path.exists("/usr/bin/cowsay"):
         cowsay = "/usr/bin/cowsay"
     elif os.path.exists("/usr/games/cowsay"):
         cowsay = "/usr/games/cowsay"
@@ -80,21 +82,30 @@ def log_lockfile():
 LOG_LOCK = open(log_lockfile(), 'w')
 
 def log_flock(runner):
-    fcntl.lockf(LOG_LOCK, fcntl.LOCK_EX)
     if runner is not None:
         try:
             fcntl.lockf(runner.output_lockfile, fcntl.LOCK_EX)
-        except OSError, e:
+        except OSError:
             # already got closed?
             pass
+    else:
+        try:
+            fcntl.lockf(LOG_LOCK, fcntl.LOCK_EX)
+        except OSError:
+            pass
+        
 
 def log_unflock(runner):
-    fcntl.lockf(LOG_LOCK, fcntl.LOCK_UN)
     if runner is not None:
         try:
             fcntl.lockf(runner.output_lockfile, fcntl.LOCK_UN)
-        except OSError, e:
+        except OSError:
             # already got closed?
+            pass
+    else:
+        try:
+            fcntl.lockf(LOG_LOCK, fcntl.LOCK_UN)
+        except OSError:
             pass
 
 def set_play(callback, play):
@@ -146,6 +157,9 @@ def vv(msg, host=None):
 
 def vvv(msg, host=None):
     return verbose(msg, host=host, caplevel=2)
+
+def vvvv(msg, host=None):
+    return verbose(msg, host=host, caplevel=3)
 
 def verbose(msg, host=None, caplevel=2):
     if utils.VERBOSITY > caplevel:
@@ -595,7 +609,9 @@ class PlaybookCallbacks(object):
 
     def on_vars_prompt(self, varname, private=True, prompt=None, encrypt=None, confirm=False, salt_size=None, salt=None, default=None):
 
-        if prompt:
+        if prompt and default:
+            msg = "%s [%s]: " % (prompt, default)
+        elif prompt:
             msg = "%s: " % prompt
         else:
             msg = 'input for %s: ' % varname

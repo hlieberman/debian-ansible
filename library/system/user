@@ -158,13 +158,24 @@ options:
             - Set a passphrase for the SSH key.  If no
               passphrase is provided, the SSH key will default to
               having no passphrase.
-examples:
-    - code: 'user: name=johnd comment="John Doe" uid=1040'
-      description: "Add the user 'johnd' with a specific uid and a primary group of 'admin'"
-    - code: "user: name=johnd state=absent remove=yes"
-      description: "Remove the user 'johnd'"
-    - code: 'user: name=jsmith generate_ssh_key=yes ssh_key_bits=2048'
-      description: "Create a 2048-bit SSH key for user jsmith"
+    update_password:
+        required: false
+        default: always
+        choices: ['always', 'on_create']
+        version_added: "1.3"
+        description:
+            - C(always) will update passwords if they differ.  C(on_create) will only set the password for newly created users.
+'''
+
+EXAMPLES = '''
+# Add the user 'johnd' with a specific uid and a primary group of 'admin'
+- user: name=johnd comment="John Doe" uid=1040
+
+# Remove the user 'johnd'
+- user: name=johnd state=absent remove=yes
+
+# Create a 2048-bit SSH key for user jsmith
+- user: name=jsmith generate_ssh_key=yes ssh_key_bits=2048
 '''
 
 import os
@@ -226,6 +237,7 @@ class User(object):
         self.ssh_type   = module.params['ssh_key_type']
         self.ssh_comment = module.params['ssh_key_comment']
         self.ssh_passphrase = module.params['ssh_key_passphrase']
+        self.update_password = module.params['update_password']
         if module.params['ssh_key_file'] is not None:
             self.ssh_file = module.params['ssh_key_file']
         else:
@@ -258,8 +270,8 @@ class User(object):
             cmd.append('-u')
             cmd.append(self.uid)
 
-        if self.non_unique:
-            cmd.append('-o')
+            if self.non_unique:
+                cmd.append('-o')
 
         if self.group is not None:
             if not self.group_exists(self.group):
@@ -267,7 +279,7 @@ class User(object):
             cmd.append('-g')
             cmd.append(self.group)
 
-        if self.groups is not None:
+        if self.groups is not None and len(self.groups):
             groups = self.get_groups_set()
             cmd.append('-G')
             cmd.append(','.join(groups))
@@ -308,8 +320,8 @@ class User(object):
             cmd.append('-u')
             cmd.append(self.uid)
 
-        if self.non_unique:
-            cmd.append('-o')
+            if self.non_unique:
+                cmd.append('-o')
 
         if self.group is not None:
             if not self.group_exists(self.group):
@@ -357,7 +369,7 @@ class User(object):
             cmd.append('-s')
             cmd.append(self.shell)
 
-        if self.password is not None and info[1] != self.password:
+        if self.update_password == 'always' and self.password is not None and info[1] != self.password:
             cmd.append('-p')
             cmd.append(self.password)
 
@@ -566,8 +578,8 @@ class FreeBsdUser(User):
             cmd.append('-u')
             cmd.append(self.uid)
 
-        if self.non_unique:
-            cmd.append('-o')
+            if self.non_unique:
+                cmd.append('-o')
 
         if self.comment is not None:
             cmd.append('-c')
@@ -631,8 +643,8 @@ class FreeBsdUser(User):
             cmd.append('-u')
             cmd.append(self.uid)
 
-        if self.non_unique:
-            cmd.append('-o')
+            if self.non_unique:
+                cmd.append('-o')
 
         if self.comment is not None and info[4] != self.comment:
             cmd.append('-c')
@@ -690,7 +702,7 @@ class FreeBsdUser(User):
             (rc, out, err) = (None, '', '')
 
         # we have to set the password in a second command
-        if self.password is not None and info[1] != self.password:
+        if self.update_password == 'always' and self.password is not None and info[1] != self.password:
             cmd = [
                 self.module.get_bin_path('chpass', True),
                 '-p',
@@ -727,8 +739,8 @@ class OpenBSDUser(User):
             cmd.append('-u')
             cmd.append(self.uid)
 
-        if self.non_unique:
-            cmd.append('-o')
+            if self.non_unique:
+                cmd.append('-o')
 
         if self.group is not None:
             if not self.group_exists(self.group):
@@ -782,8 +794,8 @@ class OpenBSDUser(User):
             cmd.append('-u')
             cmd.append(self.uid)
 
-        if self.non_unique:
-            cmd.append('-o')
+            if self.non_unique:
+                cmd.append('-o')
 
         if self.group is not None:
             if not self.group_exists(self.group):
@@ -836,7 +848,7 @@ class OpenBSDUser(User):
             cmd.append('-L')
             cmd.append(self.login_class)
 
-        if self.password is not None and info[1] != self.password:
+        if self.update_password == 'always' and self.password is not None and info[1] != self.password:
             cmd.append('-p')
             cmd.append(self.password)
 
@@ -877,8 +889,8 @@ class NetBSDUser(User):
             cmd.append('-u')
             cmd.append(self.uid)
 
-        if self.non_unique:
-            cmd.append('-o')
+            if self.non_unique:
+                cmd.append('-o')
 
         if self.group is not None:
             if not self.group_exists(self.group):
@@ -934,8 +946,8 @@ class NetBSDUser(User):
             cmd.append('-u')
             cmd.append(self.uid)
 
-        if self.non_unique:
-            cmd.append('-o')
+            if self.non_unique:
+                cmd.append('-o')
 
         if self.group is not None:
             if not self.group_exists(self.group):
@@ -989,7 +1001,7 @@ class NetBSDUser(User):
             cmd.append('-L')
             cmd.append(self.login_class)
 
-        if self.password is not None and info[1] != self.password:
+        if self.update_password == 'always' and self.password is not None and info[1] != self.password:
             cmd.append('-p')
             cmd.append(self.password)
 
@@ -1037,8 +1049,8 @@ class SunOS(User):
             cmd.append('-u')
             cmd.append(self.uid)
 
-        if self.non_unique:
-            cmd.append('-o')
+            if self.non_unique:
+                cmd.append('-o')
 
         if self.group is not None:
             if not self.group_exists(self.group):
@@ -1099,8 +1111,8 @@ class SunOS(User):
             cmd.append('-u')
             cmd.append(self.uid)
 
-        if self.non_unique:
-            cmd.append('-o')
+            if self.non_unique:
+                cmd.append('-o')
 
         if self.group is not None:
             if not self.group_exists(self.group):
@@ -1154,7 +1166,7 @@ class SunOS(User):
             (rc, out, err) = (None, '', '')
 
         # we have to set the password by editing the /etc/shadow file 
-        if self.password is not None and info[1] != self.password:
+        if self.update_password == 'always' and self.password is not None and info[1] != self.password:
             try:
                 lines = []
                 for line in open(self.SHADOWFILE, 'rb').readlines():
@@ -1209,7 +1221,7 @@ class AIX(User):
             cmd.append('-g')
             cmd.append(self.group)
 
-        if self.groups is not None:
+        if self.groups is not None and len(self.groups):
             groups = self.get_groups_set()
             cmd.append('-G')
             cmd.append(','.join(groups))
@@ -1261,20 +1273,24 @@ class AIX(User):
 
         if self.groups is not None:
             current_groups = self.user_group_membership()
-            groups = self.get_groups_set()
-            group_diff = set(current_groups).symmetric_difference(groups)
             groups_need_mod = False
+            groups = []
 
-            if group_diff:
-                if self.append:
-                    for g in groups:
-                        if g in group_diff:
-                            groups.extend(current_groups)
-                            set(groups)
-                            groups_need_mod = True
-                            break
-                else:
+            if self.groups == '':
+                if current_groups and not self.append:
                     groups_need_mod = True
+            else:
+                groups = self.get_groups_set()
+                group_diff = set(current_groups).symmetric_difference(groups)
+
+                if group_diff:
+                    if self.append:
+                        for g in groups:
+                            if g in group_diff:
+                                groups_need_mod = True
+                                break
+                    else:
+                        groups_need_mod = True
 
             if groups_need_mod:
                 cmd.append('-G')
@@ -1303,7 +1319,7 @@ class AIX(User):
             (rc, out, err) = self.execute_command(cmd)
 
         # set password with chpasswd
-        if self.password is not None and info[1] != self.password:
+        if self.update_password == 'always' and self.password is not None and info[1] != self.password:
             cmd = []
             cmd.append('echo "'+self.name+':'+self.password+'" |')
             cmd.append(self.module.get_bin_path('chpasswd', True))
@@ -1354,7 +1370,8 @@ def main():
             ssh_key_type=dict(default=ssh_defaults['type'], type='str'),
             ssh_key_file=dict(default=None, type='str'),
             ssh_key_comment=dict(default=ssh_defaults['comment'], type='str'),
-            ssh_key_passphrase=dict(default=None, type='str')
+            ssh_key_passphrase=dict(default=None, type='str'),
+            update_password=dict(default='always',choices=['always','on_create'],type='str')
         ),
         supports_check_mode=True
     )

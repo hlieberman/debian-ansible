@@ -284,15 +284,15 @@ class Connection(object):
         f = open(filename, 'w')
         for hostname, keys in self.ssh._host_keys.iteritems():
             for keytype, key in keys.iteritems():
-               # was f.write
-               added_this_time = getattr(key, '_added_by_ansible_this_time', False)
-               if not added_this_time:
-                   f.write("%s %s %s\n" % (hostname, keytype, key.get_base64()))
+                # was f.write
+                added_this_time = getattr(key, '_added_by_ansible_this_time', False)
+                if not added_this_time:
+                    f.write("%s %s %s\n" % (hostname, keytype, key.get_base64()))
         for hostname, keys in self.ssh._host_keys.iteritems():
             for keytype, key in keys.iteritems():
-               added_this_time = getattr(key, '_added_by_ansible_this_time', False)
-               if added_this_time:
-                   f.write("%s %s %s\n" % (hostname, keytype, key.get_base64()))
+                added_this_time = getattr(key, '_added_by_ansible_this_time', False)
+                if added_this_time:
+                    f.write("%s %s %s\n" % (hostname, keytype, key.get_base64()))
         f.close()
 
     def close(self):
@@ -303,9 +303,14 @@ class Connection(object):
         if self.sftp is not None:
             self.sftp.close()
 
-        if self._any_keys_added():
+        if C.PARAMIKO_RECORD_HOST_KEYS and self._any_keys_added():
+
             # add any new SSH host keys -- warning -- this could be slow
             lockfile = self.keyfile.replace("known_hosts",".known_hosts.lock") 
+            dirname = os.path.dirname(self.keyfile)
+            if not os.path.exists(dirname):
+                os.makedirs(dirname)
+
             KEY_LOCK = open(lockfile, 'w')
             fcntl.lockf(KEY_LOCK, fcntl.LOCK_EX)
             try:
