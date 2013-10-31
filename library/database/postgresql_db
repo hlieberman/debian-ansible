@@ -80,17 +80,26 @@ options:
     required: false
     default: present
     choices: [ "present", "absent" ]
-examples:
-   - code: "postgresql_db: db=acme"
-     description: Create a new database with name C(acme)
-   - code: "postgresql_db: db=acme encoding='UTF-8' lc_collate='de_DE.UTF-8' lc_ctype='de_DE.UTF-8' template='template0'"
-     description: Create a new database with name C(acme) and specific encoding and locale settings. If a template different from C(template0) is specified, encoding and locale settings must match those of the template.
 notes:
    - The default authentication assumes that you are either logging in as or sudo'ing to the C(postgres) account on the host.
    - This module uses I(psycopg2), a Python PostgreSQL database adapter. You must ensure that psycopg2 is installed on
      the host before using this module. If the remote host is the PostgreSQL server (which is the default case), then PostgreSQL must also be installed on the remote host. For Ubuntu-based systems, install the C(postgresql), C(libpq-dev), and C(python-psycopg2) packages on the remote host before using this module.
 requirements: [ psycopg2 ]
 author: Lorin Hochstein
+'''
+
+EXAMPLES = '''
+# Create a new database with name "acme"
+- postgresql_db: name=acme
+
+# Create a new database with name "acme" and specific encoding and locale
+# settings. If a template different from "template0" is specified, encoding
+# and locale settings must match those of the template.
+- postgresql_db: name=acme
+                 encoding='UTF-8'
+                 lc_collate='de_DE.UTF-8'
+                 lc_ctype='de_DE.UTF-8'
+                 template='template0'
 '''
 
 try:
@@ -121,10 +130,10 @@ def get_encoding_id(cursor, encoding):
 
 def get_db_info(cursor, db):
     query = """
-    SELECT usename AS owner,
+    SELECT rolname AS owner,
     pg_encoding_to_char(encoding) AS encoding, encoding AS encoding_id,
     datcollate AS lc_collate, datctype AS lc_ctype
-    FROM pg_database JOIN pg_user ON pg_user.usesysid = pg_database.datdba
+    FROM pg_database JOIN pg_roles ON pg_roles.oid = pg_database.datdba
     WHERE datname = %(db)s
     """
     cursor.execute(query, {'db':db})
