@@ -1,4 +1,4 @@
-ansible (1.3.4+dfsg-0.1) unstable; urgency=low
+ansible (1.3.4+dfsg-1) unstable; urgency=low
 
   [ Harlan Lieberman-Berg ]
   * Non-maintainer upload.
@@ -14,7 +14,7 @@ ansible (1.3.4+dfsg-0.1) unstable; urgency=low
   * add myself to uploader
   * build/ship the module manpages for ansible in the ansible package
 
- -- Michael Vogt <mvo@debian.org>  Thu, 31 Oct 2013 13:23:37 +0100
+ -- Michael Vogt <mvo@debian.org>  Fri, 01 Nov 2013 09:40:59 +0100
 
 ansible (1.2.1+dfsg-1) unstable; urgency=low
 
