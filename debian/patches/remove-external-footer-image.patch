@@ -5,10 +5,10 @@ Description: Remove the link to the external image in footer
 Author: Janos Guljas <janos@debian.org>
 Last-Update: 2013-04-06
 
-Index: ansible/docsite/latest/_themes/bootstrap/layout.html
+Index: ansible/docsite/_themes/bootstrap/layout.html
 ===================================================================
---- ansible.orig/docsite/latest/_themes/bootstrap/layout.html	2013-07-13 22:17:29.000000000 +0200
-+++ ansible/docsite/latest/_themes/bootstrap/layout.html	2013-07-13 22:17:29.000000000 +0200
+--- ansible.orig/docsite/_themes/bootstrap/layout.html	2013-07-13 22:17:29.000000000 +0200
++++ ansible/docsite/_themes/bootstrap/layout.html	2013-07-13 22:17:29.000000000 +0200
 @@ -119,7 +119,6 @@
  {%- block footer %}
  <footer class="footer">

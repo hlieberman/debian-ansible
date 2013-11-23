@@ -2,8 +2,8 @@ Description: Change documentation theme to one not requiring PHP and Wordpress
 Author: Harlan Lieberman-Berg <H.LiebermanBerg@gmail.com>
 Forwarded: not-needed
 
---- a/docsite/latest/conf.py
-+++ b/docsite/latest/conf.py
+--- a/docsite/conf.py
++++ b/docsite/conf.py
 @@ -101,7 +101,7 @@
  # -----------------------
  

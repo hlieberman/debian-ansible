@@ -5,13 +5,13 @@ Description: Remove the link to the external image
 Author: Janos Guljas <janos@debian.org>
 Last-Update: 2013-04-06
 
-Index: ansible/docsite/latest/rst/index.rst
+Index: ansible/docsite/rst/index.rst
 ===================================================================
---- ansible.orig/docsite/latest/rst/index.rst	2013-07-13 22:07:13.048288174 +0200
-+++ ansible/docsite/latest/rst/index.rst	2013-07-13 22:07:38.512288755 +0200
-@@ -23,7 +23,7 @@
- Overview
- ````````
+--- ansible.orig/docsite/rst/index.rst	2013-11-23 15:08:21.626570934 +0100
++++ ansible/docsite/rst/index.rst	2013-11-23 15:08:21.622570934 +0100
+@@ -57,7 +57,7 @@
+ Architecture Diagram
+ ````````````````````
  
 -.. image:: http://www.ansibleworks.com/wp-content/uploads/2013/06/ANSIBLE_DIAGRAM.jpg
 +.. image:: ../ANSIBLE_DIAGRAM.jpg
