@@ -39,14 +39,10 @@ ifneq ($(shell which git),)
 GIT_DATE := $(shell git log -n 1 --format="%ai")
 endif
 
-ifeq ($(OS), FreeBSD)
-DATE := $(shell date -j -f "%Y-%m-%d %H:%M:%s"  "$(GIT_DATE)" +%Y%m%d%H%M)
-else
-ifeq ($(OS), Darwin)
-DATE := $(shell date -j -f "%Y-%m-%d %H:%M:%S"  "$(GIT_DATE)" +%Y%m%d%H%M)
+ifeq ($(shell echo $(OS) | egrep -c 'Darwin|FreeBSD|OpenBSD'),1)
+DATE := $(shell date -j -r $(shell git log -n 1 --format="%at") +%Y%m%d%H%M)
 else
 DATE := $(shell date --utc --date="$(GIT_DATE)" +%Y%m%d%H%M)
-endif
 endif
 
 # RPM build parameters
@@ -66,7 +62,7 @@ NOSETESTS := nosetests
 all: clean python
 
 tests:
-	PYTHONPATH=./lib $(NOSETESTS) -d -v
+	PYTHONPATH=./lib ANSIBLE_LIBRARY=./library  $(NOSETESTS) -d -v
 
 # To force a rebuild of the docs run 'touch VERSION && make docs'
 docs: $(MANPAGES) modulepages
@@ -95,7 +91,7 @@ pep8:
 	-pep8 -r --ignore=E501,E221,W291,W391,E302,E251,E203,W293,E231,E303,E201,E225,E261,E241 --filename "*" library/
 
 pyflakes:
-	pyflakes lib/ansible/*.py bin/*
+	pyflakes lib/ansible/*.py lib/ansible/*/*.py bin/*
 
 clean:
 	@echo "Cleaning up distutils stuff"
@@ -182,5 +178,5 @@ modulepages:
 # because this requires Sphinx it is not run as part of every build, those building the RPM and so on can ignore this
 
 webdocs:
-	(cd docsite/latest; make docs)
+	(cd docsite/; make docs)
 

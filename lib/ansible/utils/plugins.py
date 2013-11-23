@@ -142,7 +142,7 @@ class PluginLoader(object):
     def find_plugin(self, name):
         ''' Find a plugin named name '''
 
-        if 'name' in self._plugin_path_cache:
+        if name in self._plugin_path_cache:
             return self._plugin_path_cache[name]
 
         suffix = ".py"
@@ -151,7 +151,7 @@ class PluginLoader(object):
 
         for i in self._get_paths():
             path = os.path.join(i, "%s%s" % (name, suffix))
-            if os.path.exists(path):
+            if os.path.isfile(path):
                 self._plugin_path_cache[name] = path
                 return path
 

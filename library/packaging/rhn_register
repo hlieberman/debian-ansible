@@ -172,6 +172,8 @@ class Rhn(RegistrationBase):
         # configuration.  Yeah, I know this should be subclassed ... but, oh
         # well
         def get_option_default(self, key, default=''):
+            # ignore pep8 W601 errors for this line
+            # setting this to use 'in' does not work in the rhn library
             if self.has_key(key):
                 return self[key]
             else:
@@ -262,7 +264,7 @@ class Rhn(RegistrationBase):
             Register system to RHN.  If enable_eus=True, extended update
             support will be requested.
         '''
-        register_cmd = "rhnreg_ks --username '%s' --password '%s' --force" % (self.username, self.password)
+        register_cmd = "/usr/sbin/rhnreg_ks --username '%s' --password '%s' --force" % (self.username, self.password)
         if enable_eus:
             register_cmd += " --use-eus-channel"
         if activationkey is not None:

@@ -18,6 +18,7 @@
 import ansible
 
 from ansible import utils
+from ansible.utils import template
 from ansible.runner.return_data import ReturnData
 
 class ActionModule(object):
@@ -38,13 +39,19 @@ class ActionModule(object):
 
         kv = utils.parse_kv(module_args)
         args.update(kv)
-        if not 'msg' in args:
+
+        if not 'msg' in args and not 'var' in args:
             args['msg'] = 'Hello world!'
 
-        if 'fail' in args and utils.boolean(args['fail']):
-            result = dict(failed=True, msg=args['msg'])
-        else:
-            result = dict(msg=args['msg'])
+        result = {}
+        if 'msg' in args:
+            if 'fail' in args and utils.boolean(args['fail']):
+                result = dict(failed=True, msg=args['msg'])
+            else:
+                result = dict(msg=args['msg'])
+        elif 'var' in args:
+            results = template.template(None, "{{ %s }}" % args['var'], inject)
+            result[args['var']] = results
 
         # force flag to make debug output module always verbose
         result['verbose_always'] = True

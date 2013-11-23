@@ -12,6 +12,11 @@ variables needed for Boto have already been set:
     export AWS_ACCESS_KEY_ID='AK123'
     export AWS_SECRET_ACCESS_KEY='abc123'
 
+This script also assumes there is an ec2.ini file alongside it.  To specify a
+different path to ec2.ini, define the EC2_INI_PATH environment variable:
+
+    export EC2_INI_PATH=/path/to/my_ec2.ini
+
 If you're using eucalyptus you need to set the above variables and
 you need to define:
 
@@ -116,6 +121,7 @@ from time import time
 import boto
 from boto import ec2
 from boto import rds
+from boto import route53
 import ConfigParser
 
 try:
@@ -176,7 +182,9 @@ class Ec2Inventory(object):
         ''' Reads the settings from the ec2.ini file '''
 
         config = ConfigParser.SafeConfigParser()
-        config.read(os.path.dirname(os.path.realpath(__file__)) + '/ec2.ini')
+        ec2_default_ini_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'ec2.ini')
+        ec2_ini_path = os.environ.get('EC2_INI_PATH', ec2_default_ini_path)
+        config.read(ec2_ini_path)
 
         # is eucalyptus?
         self.eucalyptus_host = None
@@ -204,6 +212,13 @@ class Ec2Inventory(object):
         self.destination_variable = config.get('ec2', 'destination_variable')
         self.vpc_destination_variable = config.get('ec2', 'vpc_destination_variable')
 
+        # Route53
+        self.route53_enabled = config.getboolean('ec2', 'route53')
+        self.route53_excluded_zones = []
+        if config.has_option('ec2', 'route53_excluded_zones'):
+            self.route53_excluded_zones.extend(
+                config.get('ec2', 'route53_excluded_zones', '').split(','))
+
         # Cache related
         cache_path = config.get('ec2', 'cache_path')
         self.cache_path_cache = cache_path + "/ansible-ec2.cache"
@@ -227,6 +242,9 @@ class Ec2Inventory(object):
 
     def do_api_calls_update_cache(self):
         ''' Do API calls to each region, and save data in cache files '''
+
+        if self.route53_enabled:
+            self.get_route53_records()
 
         for region in self.regions:
             self.get_instances_by_region(region)
@@ -326,10 +344,10 @@ class Ec2Inventory(object):
 
         # Inventory: Group by availability zone
         self.push(self.inventory, instance.placement, dest)
-        
+
         # Inventory: Group by instance type
         self.push(self.inventory, self.to_safe('type_' + instance.instance_type), dest)
-        
+
         # Inventory: Group by key pair
         if instance.key_name:
             self.push(self.inventory, self.to_safe('key_' + instance.key_name), dest)
@@ -348,6 +366,15 @@ class Ec2Inventory(object):
         for k, v in instance.tags.iteritems():
             key = self.to_safe("tag_" + k + "=" + v)
             self.push(self.inventory, key, dest)
+
+        # Inventory: Group by Route53 domain names if enabled
+        if self.route53_enabled:
+            route53_names = self.get_instance_route53_names(instance)
+            for name in route53_names:
+                self.push(self.inventory, name, dest)
+
+        # Global Tag: tag all EC2 instances
+        self.push(self.inventory, 'ec2', dest)
 
 
     def add_rds_instance(self, instance, region):
@@ -400,6 +427,57 @@ class Ec2Inventory(object):
         # Inventory: Group by parameter group
         self.push(self.inventory, self.to_safe("rds_parameter_group_" + instance.parameter_group.name), dest)
 
+        # Global Tag: all RDS instances
+        self.push(self.inventory, 'rds', dest)
+
+
+    def get_route53_records(self):
+        ''' Get and store the map of resource records to domain names that
+        point to them. '''
+
+        r53_conn = route53.Route53Connection()
+        all_zones = r53_conn.get_zones()
+
+        route53_zones = [ zone for zone in all_zones if zone.name[:-1]
+                          not in self.route53_excluded_zones ]
+
+        self.route53_records = {}
+
+        for zone in route53_zones:
+            rrsets = r53_conn.get_all_rrsets(zone.id)
+
+            for record_set in rrsets:
+                record_name = record_set.name
+
+                if record_name.endswith('.'):
+                    record_name = record_name[:-1]
+
+                for resource in record_set.resource_records:
+                    self.route53_records.setdefault(resource, set())
+                    self.route53_records[resource].add(record_name)
+
+
+    def get_instance_route53_names(self, instance):
+        ''' Check if an instance is referenced in the records we have from
+        Route53. If it is, return the list of domain names pointing to said
+        instance. If nothing points to it, return an empty list. '''
+
+        instance_attributes = [ 'public_dns_name', 'private_dns_name',
+                                'ip_address', 'private_ip_address' ]
+
+        name_list = set()
+
+        for attrib in instance_attributes:
+            try:
+                value = getattr(instance, attrib)
+            except AttributeError:
+                continue
+
+            if value in self.route53_records:
+                name_list.update(self.route53_records[value])
+
+        return list(name_list)
+
 
     def get_host_info(self):
         ''' Get variables about a specific host '''
@@ -424,7 +502,14 @@ class Ec2Inventory(object):
             key = self.to_safe('ec2_' + key)
 
             # Handle complex types
-            if type(value) in [int, bool]:
+            # state/previous_state changed to properties in boto in https://github.com/boto/boto/commit/a23c379837f698212252720d2af8dec0325c9518
+            if key == 'ec2__state':
+                instance_vars['ec2_state'] = instance.state or ''
+                instance_vars['ec2_state_code'] = instance.state_code
+            elif key == 'ec2__previous_state':
+                instance_vars['ec2_previous_state'] = instance.previous_state or ''
+                instance_vars['ec2_previous_state_code'] = instance.previous_state_code
+            elif type(value) in [int, bool]:
                 instance_vars[key] = value
             elif type(value) in [str, unicode]:
                 instance_vars[key] = value.strip()

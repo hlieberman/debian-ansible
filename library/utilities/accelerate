@@ -47,6 +47,12 @@ options:
         this number of minutes before turning itself off.
     required: false
     default: 30
+  ipv6:
+    description:
+      - The listener daemon on the remote host will bind to the ipv6 localhost socket
+        if this parameter is set to true.
+    required: false
+    default: false
 notes:
     - See the advanced playbooks chapter for more about using accelerated mode.
 requirements: [ "python-keyczar" ]
@@ -54,21 +60,21 @@ author: James Cammarata
 '''
 
 EXAMPLES = '''
-# To use accelerate mode, simply add "accelerated: true" to your play. The initial
+# To use accelerate mode, simply add "accelerate: true" to your play. The initial
 # key exchange and starting up of the daemon will occur over SSH, but all commands and
 # subsequent actions will be conducted over the raw socket connection using AES encryption
 
 - hosts: devservers
-  accelerated: true
+  accelerate: true
   tasks:
       - command: /usr/bin/anything
 '''
 
 import base64
 import getpass
+import json
 import os
 import os.path
-import shutil
 import signal
 import socket
 import struct
@@ -97,7 +103,7 @@ CHUNK_SIZE=10240
 DEBUG_LEVEL=0
 def log(msg, cap=0):
     global DEBUG_LEVEL
-    if cap >= DEBUG_LEVEL:
+    if DEBUG_LEVEL >= cap:
         syslog.syslog(syslog.LOG_NOTICE|syslog.LOG_DAEMON, msg)
 
 def vv(msg):
@@ -137,7 +143,7 @@ def daemonize_self(module, password, port, minutes):
         if pid > 0:
             vvv("exiting pid %s" % pid)
             # exit first parent
-            module.exit_json(msg="daemonized accelerate on port %s for %s minutes" % (port, minutes))
+            module.exit_json(msg="daemonized accelerate on port %s for %s minutes with pid %s" % (port, minutes, str(pid)))
     except OSError, e:
         log("fork #1 failed: %d (%s)" % (e.errno, e.strerror))
         sys.exit(1)
@@ -168,6 +174,7 @@ def daemonize_self(module, password, port, minutes):
     log("daemonizing successful")
 
 class ThreadWithReturnValue(Thread):
+
     def __init__(self, group=None, target=None, name=None, args=(), kwargs={}, Verbose=None):
         Thread.__init__(self, group, target, name, args, kwargs, Verbose)
         self._return = None
@@ -176,6 +183,7 @@ class ThreadWithReturnValue(Thread):
         if self._Thread__target is not None:
             self._return = self._Thread__target(*self._Thread__args,
                                                 **self._Thread__kwargs)
+
     def join(self,timeout=None):
         Thread.join(self, timeout=timeout)
         return self._return
@@ -188,14 +196,23 @@ class ThreadedTCPServer(SocketServer.ThreadingTCPServer):
         self.timeout = timeout
         SocketServer.ThreadingTCPServer.__init__(self, server_address, RequestHandlerClass)
 
+class ThreadedTCPV6Server(SocketServer.ThreadingTCPServer):
+    def __init__(self, server_address, RequestHandlerClass, module, password, timeout):
+        self.module = module
+        self.address_family = socket.AF_INET6
+        self.key = AesKey.Read(password)
+        self.allow_reuse_address = True
+        self.timeout = timeout
+        SocketServer.ThreadingTCPServer.__init__(self, server_address, RequestHandlerClass)
+
 class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
     def send_data(self, data):
-        packed_len = struct.pack('Q', len(data))
+        packed_len = struct.pack('!Q', len(data))
         return self.request.sendall(packed_len + data)
 
     def recv_data(self):
         header_len = 8 # size of a packed unsigned long long
-        data = b""
+        data = ""
         vvvv("in recv_data(), waiting for the header")
         while len(data) < header_len:
             d = self.request.recv(header_len - len(data))
@@ -204,7 +221,7 @@ class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
                 return None
             data += d
         vvvv("in recv_data(), got the header, unpacking")
-        data_len = struct.unpack('Q',data[:header_len])[0]
+        data_len = struct.unpack('!Q',data[:header_len])[0]
         data = data[header_len:]
         vvvv("data received so far (expecting %d): %d" % (data_len,len(data)))
         while len(data) < data_len:
@@ -233,7 +250,7 @@ class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
                     vv("bad decrypt, skipping...")
                     data2 = json.dumps(dict(rc=1))
                     data2 = self.server.key.Encrypt(data2)
-                    send_data(client, data2)
+                    self.send_data(data2)
                     return
 
                 vvvv("loading json from the data")
@@ -328,12 +345,12 @@ class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
                     log("got a failed response from the master")
                     return dict(failed=True, stderr="Master reported failure, aborting transfer")
         except Exception, e:
+            fd.close()
             tb = traceback.format_exc()
             log("failed to fetch the file: %s" % tb)
             return dict(failed=True, stderr="Could not fetch the file: %s" % str(e))
-        finally:
-            fd.close()
 
+        fd.close()
         return dict()
 
     def put(self, data):
@@ -343,13 +360,11 @@ class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
             return dict(failed=True, msg='internal error: out_path is required')
 
         final_path = None
-        final_user = None
         if 'user' in data and data.get('user') != getpass.getuser():
             vv("the target user doesn't match this user, we'll move the file into place via sudo")
             (fd,out_path) = tempfile.mkstemp(prefix='ansible.', dir=os.path.expanduser('~/.ansible/tmp/'))
             out_fd = os.fdopen(fd, 'w', 0)
             final_path = data['out_path']
-            final_user = data['user']
         else:
             out_path = data['out_path']
             out_fd = open(out_path, 'w')
@@ -371,19 +386,20 @@ class ThreadedTCPRequestHandler(SocketServer.BaseRequestHandler):
                 data = self.server.key.Decrypt(data)
                 data = json.loads(data)
         except:
+            out_fd.close()
             tb = traceback.format_exc()
             log("failed to put the file: %s" % tb)
             return dict(failed=True, stdout="Could not write the file")
-        finally:
-            vvvv("wrote %d bytes" % bytes)
-            out_fd.close()
+
+        vvvv("wrote %d bytes" % bytes)
+        out_fd.close()
 
         if final_path:
             vvv("moving %s to %s" % (out_path, final_path))
             self.server.module.atomic_move(out_path, final_path)
         return dict()
 
-def daemonize(module, password, port, timeout, minutes):
+def daemonize(module, password, port, timeout, minutes, ipv6):
     try:
         daemonize_self(module, password, port, minutes)
 
@@ -393,7 +409,10 @@ def daemonize(module, password, port, timeout, minutes):
         signal.signal(signal.SIGALRM, catcher)
         signal.setitimer(signal.ITIMER_REAL, 60 * minutes)
 
-        server = ThreadedTCPServer(("0.0.0.0", port), ThreadedTCPRequestHandler, module, password, timeout)
+        if ipv6:
+            server = ThreadedTCPV6Server(("::", port), ThreadedTCPRequestHandler, module, password, timeout)
+        else:
+            server = ThreadedTCPServer(("0.0.0.0", port), ThreadedTCPRequestHandler, module, password, timeout)
         server.allow_reuse_address = True
         
         vv("serving!")
@@ -408,6 +427,7 @@ def main():
     module = AnsibleModule(
         argument_spec = dict(
             port=dict(required=False, default=5099),
+            ipv6=dict(required=False, default=False),
             timeout=dict(required=False, default=300),
             password=dict(required=True),
             minutes=dict(required=False, default=30),
@@ -421,13 +441,14 @@ def main():
     timeout   = int(module.params['timeout'])
     minutes   = int(module.params['minutes'])
     debug     = int(module.params['debug'])
+    ipv6      = bool(module.params['ipv6'])
 
     if not HAS_KEYCZAR:
-        module.fail_json(msg="keyczar is not installed")
+        module.fail_json(msg="keyczar is not installed (on the remote side)")
 
     DEBUG_LEVEL=debug
 
-    daemonize(module, password, port, timeout, minutes)
+    daemonize(module, password, port, timeout, minutes, ipv6)
 
 # this is magic, see lib/ansible/module_common.py
 #<<INCLUDE_ANSIBLE_MODULE_COMMON>>

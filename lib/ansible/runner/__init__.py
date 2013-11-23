@@ -44,6 +44,9 @@ import poller
 import connection
 from return_data import ReturnData
 from ansible.callbacks import DefaultRunnerCallbacks, vv
+from ansible.module_common import ModuleReplacer
+
+module_replacer = ModuleReplacer(strip_comments=False)
 
 HAS_ATFORK=True
 try:
@@ -135,6 +138,7 @@ class Runner(object):
         complex_args=None,                  # structured data in addition to module_args, must be a dict
         error_on_undefined_vars=C.DEFAULT_UNDEFINED_VAR_BEHAVIOR, # ex. False
         accelerate=False,                   # use accelerated connection
+        accelerate_ipv6=False,              # accelerated connection w/ IPv6
         accelerate_port=None,               # port to use with accelerated connection
         ):
 
@@ -171,7 +175,8 @@ class Runner(object):
         self.private_key_file = private_key_file
         self.background       = background
         self.sudo             = sudo
-        self.sudo_user        = sudo_user
+        self.sudo_user_var    = sudo_user
+        self.sudo_user        = None
         self.sudo_pass        = sudo_pass
         self.is_playbook      = is_playbook
         self.environment      = environment
@@ -179,7 +184,9 @@ class Runner(object):
         self.error_on_undefined_vars = error_on_undefined_vars
         self.accelerate       = accelerate
         self.accelerate_port  = accelerate_port
+        self.accelerate_ipv6  = accelerate_ipv6
         self.callbacks.runner = self
+        self.original_transport = self.transport
 
         if self.transport == 'smart':
             # if the transport is 'smart' see if SSH can support ControlPersist if not use paramiko
@@ -318,6 +325,11 @@ class Runner(object):
             else:
                 argsfile = self._transfer_str(conn, tmp, 'arguments', args)
 
+            if self.sudo and self.sudo_user != 'root':
+                # deal with possible umask issues once sudo'ed to other user
+                cmd_args_chmod = "chmod a+r %s" % argsfile
+                self._low_level_exec_command(conn, cmd_args_chmod, tmp, sudoable=False)
+
             if async_jid is None:
                 cmd = "%s %s" % (remote_module_path, argsfile)
             else:
@@ -423,16 +435,13 @@ class Runner(object):
         inject['vars']        = self.module_vars
         inject['defaults']    = self.default_vars
         inject['environment'] = self.environment
+        inject['playbook_dir'] = self.basedir
 
         if self.inventory.basedir() is not None:
             inject['inventory_dir'] = self.inventory.basedir()
 
         if self.inventory.src() is not None:
             inject['inventory_file'] = self.inventory.src()
-
-        # late processing of parameterized sudo_user
-        if self.sudo_user is not None:
-            self.sudo_user = template.template(self.basedir, self.sudo_user, inject)
 
         # allow with_foo to work in playbooks...
         items = None
@@ -455,7 +464,12 @@ class Runner(object):
 
             if len(items) and utils.is_list_of_strings(items) and self.module_name in [ 'apt', 'yum', 'pkgng' ]:
                 # hack for apt, yum, and pkgng so that with_items maps back into a single module call
-                inject['item'] = ",".join(items)
+                use_these_items = []
+                for x in items:
+                    inject['item'] = x
+                    if not self.conditional or utils.check_conditional(self.conditional, self.basedir, inject, fail_on_undefined=self.error_on_undefined_vars):
+                        use_these_items.append(x)
+                inject['item'] = ",".join(use_these_items)
                 items = None
 
         # logic to replace complex args if possible
@@ -507,7 +521,7 @@ class Runner(object):
                 for x in results:
                     if x.get('changed') == True:
                         all_changed = True
-                    if (x.get('failed') == True) or (('rc' in x) and (x['rc'] != 0)):
+                    if (x.get('failed') == True) or ('failed_when_result' in x and [x['failed_when_result']] or [('rc' in x) and (x['rc'] != 0)])[0]:
                         all_failed = True
                         break
             msg = 'All items completed'
@@ -526,6 +540,9 @@ class Runner(object):
     def _executor_internal_inner(self, host, module_name, module_args, inject, port, is_chained=False, complex_args=None):
         ''' decides how to invoke a module '''
 
+        # late processing of parameterized sudo_user (with_items,..)
+        if self.sudo_user_var is not None:
+            self.sudo_user = template.template(self.basedir, self.sudo_user_var, inject)
 
         # allow module args to work as a dictionary
         # though it is usually a string
@@ -568,6 +585,7 @@ class Runner(object):
         actual_pass = inject.get('ansible_ssh_pass', self.remote_pass)
         actual_transport = inject.get('ansible_connection', self.transport)
         actual_private_key_file = inject.get('ansible_ssh_private_key_file', self.private_key_file)
+        self.sudo_pass = inject.get('ansible_sudo_pass', self.sudo_pass)
 
         if self.accelerate and actual_transport != 'local':
             #Fix to get the inventory name of the host to accelerate plugin
@@ -607,6 +625,7 @@ class Runner(object):
                 actual_pass = delegate_info.get('ansible_ssh_pass', actual_pass)
                 actual_private_key_file = delegate_info.get('ansible_ssh_private_key_file', self.private_key_file)
                 actual_transport = delegate_info.get('ansible_connection', self.transport)
+                self.sudo_pass = delegate_info.get('ansible_sudo_pass', self.sudo_pass)
                 for i in delegate_info:
                     if i.startswith("ansible_") and i.endswith("_interpreter"):
                         inject[i] = delegate_info[i]
@@ -657,7 +676,31 @@ class Runner(object):
 
 
         result = handler.run(conn, tmp, module_name, module_args, inject, complex_args)
-
+        # Code for do until feature
+        until = self.module_vars.get('until', None)
+        if until is not None and result.comm_ok:
+            inject[self.module_vars.get('register')] = result.result
+            cond = template.template(self.basedir, until, inject, expand_lists=False)
+            if not utils.check_conditional(cond,  self.basedir, inject, fail_on_undefined=self.error_on_undefined_vars):
+                retries = self.module_vars.get('retries')
+                delay   = self.module_vars.get('delay')
+                for x in range(1, retries + 1):
+                    time.sleep(delay)
+                    tmp = ''
+                    if getattr(handler, 'NEEDS_TMPPATH', True):
+                        tmp = self._make_tmp_path(conn)
+                    result = handler.run(conn, tmp, module_name, module_args, inject, complex_args)
+                    result.result['attempts'] = x
+                    vv("Result from run %i is: %s" % (x, result.result))
+                    inject[self.module_vars.get('register')] = result.result
+                    cond = template.template(self.basedir, until, inject, expand_lists=False)
+                    if utils.check_conditional(cond, self.basedir, inject, fail_on_undefined=self.error_on_undefined_vars):
+                        break
+                if result.result['attempts'] == retries and not utils.check_conditional(cond, self.basedir, inject, fail_on_undefined=self.error_on_undefined_vars):
+                    result.result['failed'] = True 
+                    result.result['msg'] = "Task failed as maximum retries was encountered"
+            else:
+                result.result['attempts'] = 0
         conn.close()
 
         if not result.comm_ok:
@@ -674,13 +717,17 @@ class Runner(object):
             )
 
             changed_when = self.module_vars.get('changed_when')
-            if changed_when is not None:
+            failed_when = self.module_vars.get('failed_when')
+            if changed_when is not None or failed_when is not None:
                 register = self.module_vars.get('register')
                 if  register is not None:
                     if 'stdout' in data:
                         data['stdout_lines'] = data['stdout'].splitlines()
                     inject[register] = data
-                data['changed'] = utils.check_conditional(changed_when, self.basedir, inject, fail_on_undefined=self.error_on_undefined_vars)
+                if changed_when is not None:
+                    data['changed'] = utils.check_conditional(changed_when, self.basedir, inject, fail_on_undefined=self.error_on_undefined_vars)
+                if failed_when is not None:
+                    data['failed_when_result'] = data['failed'] = utils.check_conditional(failed_when, self.basedir, inject, fail_on_undefined=self.error_on_undefined_vars)
 
             if is_chained:
                 # no callbacks
@@ -705,6 +752,10 @@ class Runner(object):
             executable = C.DEFAULT_EXECUTABLE
 
         sudo_user = self.sudo_user
+        
+        if self.remote_user == sudo_user:
+            sudoable = False
+        
         rc, stdin, stdout, stderr = conn.exec_command(cmd, tmp, sudo_user, sudoable=sudoable, executable=executable)
 
         if type(stdout) not in [ str, unicode ]:
@@ -737,7 +788,8 @@ class Runner(object):
             "(/usr/bin/digest -a md5 %s 2>/dev/null)" % path,   # Solaris 10+
             "(/sbin/md5 -q %s 2>/dev/null)" % path,     # Freebsd
             "(/usr/bin/md5 -n %s 2>/dev/null)" % path,  # Netbsd
-            "(/bin/md5 -q %s 2>/dev/null)" % path       # Openbsd
+            "(/bin/md5 -q %s 2>/dev/null)" % path,      # Openbsd
+            "(/usr/bin/csum -h MD5 %s 2>/dev/null)" % path # AIX
         ]
 
         cmd = " || ".join(md5s)
@@ -800,11 +852,6 @@ class Runner(object):
     def _copy_module(self, conn, tmp, module_name, module_args, inject, complex_args=None):
         ''' transfer a module over SFTP, does not run it '''
 
-        # FIXME if complex args is none, set to {}
-
-        if module_name.startswith("/"):
-            raise errors.AnsibleFileNotFound("%s is not a module" % module_name)
-
         # Search module path(s) for named module.
         in_path = utils.plugins.module_finder.find_plugin(module_name)
         if in_path is None:
@@ -812,45 +859,10 @@ class Runner(object):
 
         out_path = os.path.join(tmp, module_name)
 
-        module_data = ""
-        module_style = 'old'
-
-        with open(in_path) as f:
-            module_data = f.read()
-            if module_common.REPLACER in module_data:
-                module_style = 'new'
-            if 'WANT_JSON' in module_data:
-                module_style = 'non_native_want_json'
-
-            complex_args_json = utils.jsonify(complex_args)
-            # We force conversion of module_args to str because module_common calls shlex.split,
-            # a standard library function that incorrectly handles Unicode input before Python 2.7.3.
-            encoded_args = repr(module_args.encode('utf-8'))
-            encoded_lang = repr(C.DEFAULT_MODULE_LANG)
-            encoded_complex = repr(complex_args_json)
-
-            module_data = module_data.replace(module_common.REPLACER, module_common.MODULE_COMMON)
-            module_data = module_data.replace(module_common.REPLACER_ARGS, encoded_args)
-            module_data = module_data.replace(module_common.REPLACER_LANG, encoded_lang)
-            module_data = module_data.replace(module_common.REPLACER_COMPLEX, encoded_complex)
-
-            if module_style == 'new':
-                facility = C.DEFAULT_SYSLOG_FACILITY
-                if 'ansible_syslog_facility' in inject:
-                    facility = inject['ansible_syslog_facility']
-                module_data = module_data.replace('syslog.LOG_USER', "syslog.%s" % facility)
-
-        lines = module_data.split("\n")
-        shebang = None
-        if lines[0].startswith("#!"):
-            shebang = lines[0].strip()
-            args = shlex.split(str(shebang[2:]))
-            interpreter = args[0]
-            interpreter_config = 'ansible_%s_interpreter' % os.path.basename(interpreter)
-
-            if interpreter_config in inject:
-                lines[0] = shebang = "#!%s %s" % (inject[interpreter_config], " ".join(args[1:]))
-                module_data = "\n".join(lines)
+        # insert shared code and arguments into the module
+        (module_data, module_style, shebang) = module_replacer.modify_module(
+            in_path, complex_args, module_args, inject
+        )
 
         self._transfer_str(conn, tmp, module_name, module_data)
 
