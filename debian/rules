@@ -18,9 +18,6 @@ override_dh_auto_build:
 	rm -rf docbuild
 	# man pages for the "man3" section
 	make docs
-	# fix warnings
-	sed -i -e 's/^." ------ EXAMPLES/.SH EXAMPLES/' ./docs/man/man3/*
-	sed -i -e '/^."/d' ./docs/man/man3/*
 
 override_dh_auto_clean:
 	# sphinx auto-build stuff
