@@ -23,6 +23,7 @@ import struct
 import time
 from ansible.callbacks import vvv, vvvv
 from ansible.runner.connection_plugins.ssh import Connection as SSHConnection
+from ansible.runner.connection_plugins.paramiko_ssh import Connection as ParamikoConnection
 from ansible import utils
 from ansible import errors
 from ansible import constants
@@ -59,21 +60,31 @@ class Connection(object):
         elif not isinstance(self.accport, int):
             self.accport = int(self.accport)
 
-        self.ssh = SSHConnection(
-            runner=self.runner,
-            host=self.host, 
-            port=self.port, 
-            user=self.user, 
-            password=password, 
-            private_key_file=private_key_file
-        )
+        if self.runner.original_transport == "paramiko":
+            self.ssh = ParamikoConnection(
+                runner=self.runner,
+                host=self.host,
+                port=self.port,
+                user=self.user,
+                password=password,
+                private_key_file=private_key_file
+            )
+        else:
+            self.ssh = SSHConnection(
+                runner=self.runner,
+                host=self.host,
+                port=self.port,
+                user=self.user,
+                password=password,
+                private_key_file=private_key_file
+            )
 
         # attempt to work around shared-memory funness
         if getattr(self.runner, 'aes_keys', None):
             utils.AES_KEYS = self.runner.aes_keys
 
     def _execute_accelerate_module(self):
-        args = "password=%s port=%s debug=%d" % (base64.b64encode(self.key.__str__()), str(self.accport), int(utils.VERBOSITY))
+        args = "password=%s port=%s debug=%d ipv6=%s" % (base64.b64encode(self.key.__str__()), str(self.accport), int(utils.VERBOSITY), self.runner.accelerate_ipv6)
         inject = dict(password=self.key)
         if self.runner.accelerate_inventory_host:
             inject = utils.combine_vars(inject, self.runner.inventory.get_variables(self.runner.accelerate_inventory_host))
@@ -118,7 +129,7 @@ class Connection(object):
         return self
 
     def send_data(self, data):
-        packed_len = struct.pack('Q',len(data))
+        packed_len = struct.pack('!Q',len(data))
         return self.conn.sendall(packed_len + data)
 
     def recv_data(self):
@@ -133,7 +144,7 @@ class Connection(object):
                     return None
                 data += d
             vvvv("%s: got the header, unpacking" % self.host)
-            data_len = struct.unpack('Q',data[:header_len])[0]
+            data_len = struct.unpack('!Q',data[:header_len])[0]
             data = data[header_len:]
             vvvv("%s: data received so far (expecting %d): %d" % (self.host,data_len,len(data)))
             while len(data) < data_len:
@@ -154,7 +165,7 @@ class Connection(object):
             executable = constants.DEFAULT_EXECUTABLE
 
         if self.runner.sudo and sudoable and sudo_user:
-            cmd, prompt = utils.make_sudo_cmd(sudo_user, executable, cmd)
+            cmd, prompt, success_key = utils.make_sudo_cmd(sudo_user, executable, cmd)
 
         vvv("EXEC COMMAND %s" % cmd)
 

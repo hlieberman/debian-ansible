@@ -20,6 +20,7 @@ import re
 import codecs
 import jinja2
 from jinja2.runtime import StrictUndefined
+from jinja2.exceptions import TemplateSyntaxError
 import yaml
 import json
 from ansible import errors
@@ -29,6 +30,7 @@ import subprocess
 import datetime
 import pwd
 import ast
+import traceback
 
 class Globals(object):
 
@@ -150,7 +152,7 @@ def _legacy_varFind(basedir, text, vars, lookup_fatal, depth, expand_lists):
 
     # short circuit this whole function if we have specified we don't want
     # legacy var replacement
-    if C.DEFAULT_LEGACY_PLAYBOOK_VARIABLES == 'no':
+    if C.DEFAULT_LEGACY_PLAYBOOK_VARIABLES == False:
         return None
 
     start = text.find("$")
@@ -262,6 +264,8 @@ def legacy_varReplace(basedir, raw, vars, lookup_fatal=True, depth=0, expand_lis
     ''' Perform variable replacement of $variables in string raw using vars dictionary '''
     # this code originally from yum
 
+    orig = raw
+
     if not isinstance(raw, unicode):
         raw = raw.decode("utf-8")
 
@@ -292,12 +296,17 @@ def legacy_varReplace(basedir, raw, vars, lookup_fatal=True, depth=0, expand_lis
         done.append(unicode(replacement)) # Append replacement value
         raw = raw[end:]                   # Continue with remainder of string
 
-    return ''.join(done)
+    result = ''.join(done)
 
-# TODO: varname is misnamed here
+    if (not '\$' in orig) and (result != orig):
+        from ansible import utils
+        # above check against \$ as templating will remove the backslash
+        utils.deprecated("Legacy variable subsitution, such as using ${foo} or $foo instead of {{ foo }} is currently valid but will be phased out and has been out of favor since version 1.2. This is the last of legacy features on our deprecation list. You may continue to use this if you have specific needs for now","1.6")
+    return result
 
 def template(basedir, varname, vars, lookup_fatal=True, depth=0, expand_lists=True, convert_bare=False, fail_on_undefined=False, filter_fatal=True):
     ''' templates a data structure by traversing it and substituting for other data structures '''
+    from ansible import utils
 
     try:
         if convert_bare and isinstance(varname, basestring):
@@ -308,6 +317,12 @@ def template(basedir, varname, vars, lookup_fatal=True, depth=0, expand_lists=Tr
         if isinstance(varname, basestring):
             if '{{' in varname or '{%' in varname:
                 varname = template_from_string(basedir, varname, vars, fail_on_undefined)
+
+                if (varname.startswith("{") and not varname.startswith("{{")) or varname.startswith("["):
+                    eval_results = utils.safe_eval(varname, locals=vars, include_exceptions=True)
+                    if eval_results[1] is None:
+                        varname = eval_results[0]
+
             if not '$' in varname:
                 return varname
     
@@ -440,7 +455,15 @@ def template_from_file(basedir, path, vars):
             setattr(environment,key.strip(),ast.literal_eval(val.strip()))
 
     environment.template_class = J2Template
-    t = environment.from_string(data)
+    try:
+        t = environment.from_string(data)
+    except TemplateSyntaxError, e:
+        # Throw an exception which includes a more user friendly error message
+        values = {'name': realpath, 'lineno': e.lineno, 'error': str(e)}
+        msg = 'file: %(name)s, line number: %(lineno)s, error: %(error)s' % \
+               values
+        error = errors.AnsibleError(msg)
+        raise error
     vars = vars.copy()
     try:
         template_uid = pwd.getpwuid(os.stat(realpath).st_uid).pw_name
@@ -495,6 +518,7 @@ def template_from_string(basedir, data, vars, fail_on_undefined=False):
         # TODO: may need some way of using lookup plugins here seeing we aren't calling
         # the legacy engine, lookup() as a function, perhaps?
 
+        data = data.decode('utf-8')
         try:
             t = environment.from_string(data)
         except Exception, e:
@@ -509,9 +533,14 @@ def template_from_string(basedir, data, vars, fail_on_undefined=False):
 
         t.globals['lookup'] = my_lookup
 
-        res = jinja2.utils.concat(t.root_render_func(t.new_context(_jinja2_vars(basedir, vars, t.globals, fail_on_undefined), shared=True)))
+        
+
+        jvars =_jinja2_vars(basedir, vars, t.globals, fail_on_undefined)
+        new_context = t.new_context(jvars, shared=True)
+        rf = t.root_render_func(new_context)
+        res = jinja2.utils.concat(rf)
         return res
-    except jinja2.exceptions.UndefinedError:
+    except (jinja2.exceptions.UndefinedError, errors.AnsibleUndefinedVariable):
         if fail_on_undefined:
             raise
         else:

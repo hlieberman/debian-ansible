@@ -28,6 +28,7 @@ import yum
 DOCUMENTATION = '''
 ---
 module: yum
+version_added: historical
 short_description: Manages packages with the I(yum) package manager
 description:
      - Will install, upgrade, remove, and list packages with the I(yum) package manager.
@@ -711,8 +712,7 @@ def main():
             disablerepo=dict(),
             list=dict(),
             conf_file=dict(default=None),
-            disable_gpg_check=dict(required=False, default="no",
-                                   choices=BOOLEANS, type='bool'),
+            disable_gpg_check=dict(required=False, default="no", type='bool'),
         ),
         required_one_of = [['name','list']],
         mutually_exclusive = [['name','list']],

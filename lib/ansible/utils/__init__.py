@@ -27,6 +27,7 @@ from ansible import errors
 from ansible import __version__
 from ansible.utils.plugins import *
 from ansible.utils import template
+from ansible.callbacks import display
 import ansible.constants as C
 import time
 import StringIO
@@ -39,8 +40,14 @@ import difflib
 import warnings
 import traceback
 import getpass
+import sys
+import textwrap
 
 VERBOSITY=0
+
+# list of all deprecation messages to prevent duplicate display
+deprecations = {}
+warns = {}
 
 MAX_FILE_SIZE_FOR_DIFF=1*1024*1024
 
@@ -78,7 +85,7 @@ def key_for_hostname(hostname):
     # to use no persistent daemons or key management
 
     if not KEYCZAR_AVAILABLE:
-        raise errors.AnsibleError("python-keyczar must be installed to use fireball/accelerated mode")
+        raise errors.AnsibleError("python-keyczar must be installed on the control machine to use accelerated modes")
 
     key_path = os.path.expanduser("~/.fireball.keys")
     if not os.path.exists(key_path):
@@ -158,6 +165,12 @@ def is_changed(result):
 
 def check_conditional(conditional, basedir, inject, fail_on_undefined=False, jinja2=False):
 
+    if isinstance(conditional, list):
+        for x in conditional:
+            if not check_conditional(x, basedir, inject, fail_on_undefined=fail_on_undefined, jinja2=jinja2):
+                return False
+        return True
+
     if jinja2:
         conditional = "jinja2_compare %s" % conditional
 
@@ -167,6 +180,7 @@ def check_conditional(conditional, basedir, inject, fail_on_undefined=False, jin
         if conditional in inject and str(inject[conditional]).find('-') == -1:
             conditional = inject[conditional]
         conditional = template.template(basedir, conditional, inject, fail_on_undefined=fail_on_undefined)
+        original = str(conditional).replace("jinja2_compare ","")
         # a Jinja2 evaluation that results in something Python can eval!
         presented = "{%% if %s %%} True {%% else %%} False {%% endif %%}" % conditional
         conditional = template.template(basedir, presented, inject)
@@ -181,13 +195,13 @@ def check_conditional(conditional, basedir, inject, fail_on_undefined=False, jin
             elif conditional.find("is defined") != -1:
                 return False
             else:
-                raise errors.AnsibleError("error while evaluating conditional: %s" % conditional)
+                raise errors.AnsibleError("error while evaluating conditional: %s" % original)
         elif val == "True":
             return True
         elif val == "False":
             return False
         else:
-            raise errors.AnsibleError("unable to evaluate conditional: %s" % conditional)
+            raise errors.AnsibleError("unable to evaluate conditional: %s" % original)
 
     if not isinstance(conditional, basestring):
         return conditional
@@ -254,7 +268,11 @@ def path_dwim_relative(original, dirname, source, playbook_base, check=True):
     # (used by roles code)
 
     basedir = os.path.dirname(original)
-    template2 = os.path.join(basedir, '..', dirname, source)
+    if os.path.islink(basedir):
+        basedir = unfrackpath(basedir)
+        template2 = os.path.join(basedir, dirname, source)
+    else:
+        template2 = os.path.join(basedir, '..', dirname, source)
     source2 = path_dwim(basedir, template2)
     if os.path.exists(source2):
         return source2
@@ -332,6 +350,98 @@ def parse_yaml(data):
     ''' convert a yaml string to a data structure '''
     return smush_ds(yaml.safe_load(data))
 
+def process_common_errors(msg, probline, column):
+    replaced = probline.replace(" ","")
+
+    if replaced.find(":{{") != -1 and replaced.find("}}") != -1:
+        msg = msg + """
+This one looks easy to fix.  YAML thought it was looking for the start of a 
+hash/dictionary and was confused to see a second "{".  Most likely this was
+meant to be an ansible template evaluation instead, so we have to give the 
+parser a small hint that we wanted a string instead. The solution here is to 
+just quote the entire value.
+
+For instance, if the original line was:
+
+    app_path: {{ base_path }}/foo
+
+It should be written as:
+
+    app_path: "{{ base_path }}/foo"
+"""
+        return msg
+
+    elif len(probline) and len(probline) >= column and probline[column] == ":" and probline.count(':') > 1:
+        msg = msg + """
+This one looks easy to fix.  There seems to be an extra unquoted colon in the line 
+and this is confusing the parser. It was only expecting to find one free 
+colon. The solution is just add some quotes around the colon, or quote the 
+entire line after the first colon.
+
+For instance, if the original line was:
+
+    copy: src=file.txt dest=/path/filename:with_colon.txt
+
+It can be written as:
+
+    copy: src=file.txt dest='/path/filename:with_colon.txt'
+
+Or:
+    
+    copy: 'src=file.txt dest=/path/filename:with_colon.txt'
+
+
+"""
+        return msg
+    else:
+        parts = probline.split(":")
+        if len(parts) > 1:
+            middle = parts[1].strip()
+            match = False
+            unbalanced = False
+            if middle.startswith("'") and not middle.endswith("'"):
+                match = True
+            elif middle.startswith('"') and not middle.endswith('"'):
+                match = True
+            if middle[0] in [ '"', "'" ] and middle[-1] in [ '"', "'" ] and probline.count("'") > 2 or probline.count("'") > 2:
+                unbalanced = True
+            if match:
+                msg = msg + """
+This one looks easy to fix.  It seems that there is a value started 
+with a quote, and the YAML parser is expecting to see the line ended 
+with the same kind of quote.  For instance:
+
+    when: "ok" in result.stdout
+
+Could be written as:
+
+   when: '"ok" in result.stdout'
+
+or equivalently:
+
+   when: "'ok' in result.stdout"
+
+"""
+                return msg
+
+            if unbalanced:
+                msg = msg + """
+We could be wrong, but this one looks like it might be an issue with 
+unbalanced quotes.  If starting a value with a quote, make sure the 
+line ends with the same set of quotes.  For instance this arbitrary 
+example:
+
+    foo: "bad" "wolf"
+
+Could be written as:
+
+    foo: '"bad" "wolf"'
+
+"""
+                return msg
+
+    return msg
+
 def process_yaml_error(exc, data, path=None):
     if hasattr(exc, 'problem_mark'):
         mark = exc.problem_mark
@@ -347,6 +457,10 @@ Note: The error may actually appear before this position: line %s, column %s
 %s
 %s
 %s""" % (path, mark.line + 1, mark.column + 1, before_probline, probline, arrow)
+
+        msg = process_common_errors(msg, probline, mark.column)
+
+
     else:
         # No problem markers means we have to throw a generic
         # "stuff messed up" type message. Sry bud.
@@ -404,9 +518,11 @@ def merge_hash(a, b):
 def md5s(data):
     ''' Return MD5 hex digest of data. '''
 
-    buf = StringIO.StringIO(data)
     digest = _md5()
-    digest.update(buf.read())
+    try:
+        digest.update(data)
+    except UnicodeEncodeError:
+        digest.update(data.encode('utf-8'))
     return digest.hexdigest()
 
 def md5(filename):
@@ -733,10 +849,11 @@ def make_sudo_cmd(sudo_user, executable, cmd):
     # the -p option.
     randbits = ''.join(chr(random.randint(ord('a'), ord('z'))) for x in xrange(32))
     prompt = '[sudo via ansible, key=%s] password: ' % randbits
+    success_key = 'SUDO-SUCCESS-%s' % randbits
     sudocmd = '%s -k && %s %s -S -p "%s" -u %s %s -c %s' % (
         C.DEFAULT_SUDO_EXE, C.DEFAULT_SUDO_EXE, C.DEFAULT_SUDO_FLAGS,
-        prompt, sudo_user, executable or '$SHELL', pipes.quote(cmd))
-    return ('/bin/sh -c ' + pipes.quote(sudocmd), prompt)
+        prompt, sudo_user, executable or '$SHELL', pipes.quote('echo %s; %s' % (success_key, cmd)))
+    return ('/bin/sh -c ' + pipes.quote(sudocmd), prompt, success_key)
 
 _TO_UNICODE_TYPES = (unicode, type(None))
 
@@ -783,10 +900,10 @@ def is_list_of_strings(items):
             return False
     return True
 
-def safe_eval(str):
+def safe_eval(str, locals=None, include_exceptions=False):
     '''
     this is intended for allowing things like:
-    with_items: {{ a_list_variable }}
+    with_items: a_list_variable
     where Jinja2 would return a string
     but we do not want to allow it to call functions (outside of Jinja2, where
     the env is constrained)
@@ -802,15 +919,31 @@ def safe_eval(str):
     # do not allow method calls to modules
     if not isinstance(str, basestring):
         # already templated to a datastructure, perhaps?
+        if include_exceptions:
+            return (str, None)
         return str
     if re.search(r'\w\.\w+\(', str):
+        if include_exceptions:
+            return (str, None)
         return str
     # do not allow imports
     if re.search(r'import \w+', str):
+        if include_exceptions:
+            return (str, None)
         return str
     try:
-        return eval(str)
+        result = None
+        if not locals:
+            result = eval(str)
+        else:
+            result = eval(str, None, locals)
+        if include_exceptions:
+            return (result, None)
+        else:
+            return result
     except Exception, e:
+        if include_exceptions:
+            return (str, e)
         return str
 
 
@@ -846,10 +979,41 @@ def listify_lookup_plugin_terms(terms, basedir, inject):
 
     return terms
 
+def deprecated(msg, version):
+    ''' used to print out a deprecation message.'''
+    if not C.DEPRECATION_WARNINGS:
+        return
+    new_msg = "\n[DEPRECATION WARNING]: %s. This feature will be removed in version %s." % (msg, version)
+    new_msg = new_msg + " Deprecation warnings can be disabled by setting deprecation_warnings=False in ansible.cfg.\n\n"
+    wrapped = textwrap.wrap(new_msg, 79)
+    new_msg = "\n".join(wrapped) + "\n"
+
+    if new_msg not in deprecations:
+        display(new_msg, color='purple', stderr=True)
+        deprecations[new_msg] = 1
+
+def warning(msg):
+    new_msg = "\n[WARNING]: %s" % msg
+    wrapped = textwrap.wrap(new_msg, 79)
+    new_msg = "\n".join(wrapped) + "\n"
+    if new_msg not in warns:
+        display(new_msg, color='bright purple', stderr=True)
+        warns[new_msg] = 1
+
 def combine_vars(a, b):
+
     if C.DEFAULT_HASH_BEHAVIOUR == "merge":
         return merge_hash(a, b)
     else:
         return dict(a.items() + b.items())
 
+def random_password(length=20, chars=C.DEFAULT_PASSWORD_CHARS):
+    '''Return a random password string of length containing only chars.'''
 
+    password = []
+    while len(password) < length:
+        new_char = os.urandom(1)
+        if new_char in chars:
+            password.append(new_char)
+
+    return ''.join(password)

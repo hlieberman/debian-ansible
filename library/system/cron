@@ -144,6 +144,7 @@ EXAMPLES = '''
 import os
 import re
 import tempfile
+import platform
 
 CRONCMD = "/usr/bin/crontab"
 
@@ -265,9 +266,10 @@ class CronTab(object):
     def remove_job_file(self):
         try:
             os.unlink(self.cron_file)
+            return True
         except OSError, e:
             # cron file does not exist
-            return
+            return False
         except:
             raise CronTabError("Unexpected error:", sys.exc_info()[0])
 
@@ -341,31 +343,31 @@ class CronTab(object):
             result += '\n'
         return result
 
-    def _read_file_execute(self):
-        """
-        Returns the command line for reading a crontab
-        """
-        return "%s -l %s" % (CRONCMD, self._user_execute())
-
     def _read_user_execute(self):
         """
         Returns the command line for reading a crontab
         """
-        return "%s -l %s" % (CRONCMD, self._user_execute())
+        user = ''
+        if self.user:
+            if platform.system() == 'SunOS':
+                return "su '%s' -c '%s -l'" % (self.user, CRONCMD)
+            else:
+                user = '-u %s' % self.user
+        return "%s %s %s" % (CRONCMD , user, '-l')
 
     def _write_execute(self, path):
         """
         Return the command line for writing a crontab
         """
-        return "%s %s %s" % (CRONCMD, self._user_execute(), path)
-
-    def _user_execute(self):
-        """
-        User command switches to append to the read and write commands.
-        """
+        user = ''
         if self.user:
-            return "%s %s" % ('-u', str(self.user))
-        return ''
+            if platform.system() == 'SunOS':
+                return "chown %s %s ; su '%s' -c '%s %s'" % (self.user, path, self.user, CRONCMD, path)
+            else:
+                user = '-u %s' % self.user
+        return "%s %s %s" % (CRONCMD , user, path)
+
+
 
 #==================================================
 
@@ -426,6 +428,8 @@ def main():
     changed      = False
     res_args     = dict()
 
+    # Ensure all files generated are only writable by the owning user.  Primarily relevant for the cron_file option.
+    os.umask(022)
     crontab = CronTab(module, user, cron_file)
 
     if crontab.syslogging:
@@ -451,6 +455,9 @@ def main():
     if job is None and do_install:
         module.fail_json(msg="You must specify 'job' to install a new cron job")
 
+    if job and name is None and not do_install:
+        module.fail_json(msg="You must specify 'name' to remove a cron job")
+
     if reboot:
         if special_time:
             module.fail_json(msg="reboot and special_time are mutually exclusive")
@@ -462,9 +469,8 @@ def main():
         (backuph, backup_file) = tempfile.mkstemp(prefix='crontab')
         crontab.write(backup_file)
 
-    if crontab.cron_file and not do_install:
-        crontab.remove_job_file()
-        changed = True
+    if crontab.cron_file and not name and not do_install:
+        changed = crontab.remove_job_file()
         module.exit_json(changed=changed,cron_file=cron_file,state=state)
 
     job = crontab.get_cron_job(minute, hour, day, month, weekday, job, special_time)
