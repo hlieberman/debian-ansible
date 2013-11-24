@@ -4,9 +4,9 @@ ansible (1.4.0+dfsg-1) unstable; urgency=low
   * debian/rules:
     - remove sed manpage fixes, fixed upstream
   * debian/patches/fix-html-makefile:
-    - rmeoved, fixed upstream
+    - removed, fixed upstream
 
- -- Michael Vogt <mvo@debian.org>  Sat, 23 Nov 2013 15:04:50 +0100
+ -- Michael Vogt <mvo@debian.org>  Sun, 24 Nov 2013 10:41:27 +0100
 
 ansible (1.3.4+dfsg-1) unstable; urgency=low
 
