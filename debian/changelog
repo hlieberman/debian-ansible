@@ -2,7 +2,7 @@ ansible (1.4.1+dfsg-1) unstable; urgency=low
 
   * New upstream version
 
- -- Michael Vogt <michael.vogt@ubuntu.com>  Tue, 03 Dec 2013 08:11:53 +0100
+ -- Michael Vogt <mvo@debian.org>  Tue, 03 Dec 2013 08:17:05 +0100
 
 ansible (1.4.0+dfsg-1) unstable; urgency=low
 
