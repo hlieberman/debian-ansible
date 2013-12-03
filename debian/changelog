@@ -1,6 +1,7 @@
 ansible (1.4.1+dfsg-1) unstable; urgency=low
 
   * New upstream version
+  * add asciidoc build-depends
 
  -- Michael Vogt <mvo@debian.org>  Tue, 03 Dec 2013 08:17:05 +0100
 

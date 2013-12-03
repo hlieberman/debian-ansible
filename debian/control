@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: Janos Guljas <janos@debian.org>
 Uploaders: Michael Vogt <mvo@debian.org>
 Build-Depends: debhelper (>= 9), python-all, python-setuptools,
- python-sphinx, python-yaml
+ python-sphinx, python-yaml, asciidoc
 Standards-Version: 3.9.4
 Homepage: http://ansible.cc
 Vcs-Git: git://anonscm.debian.org/collab-maint/ansible.git
