@@ -10,7 +10,7 @@ BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-buildroot
 Name: ansible
 Release: 1%{?dist}
 Summary: SSH-based configuration management, deployment, and orchestration engine
-Version: 1.4.1
+Version: 1.4.3
 
 Group: Development/Libraries
 License: GPLv3
@@ -25,6 +25,7 @@ Requires: python26-PyYAML
 Requires: python26-paramiko
 Requires: python26-jinja2
 Requires: python26-keyczar
+Requires: python26-httplib2
 %else
 BuildRequires: python2-devel
 
@@ -32,6 +33,7 @@ Requires: PyYAML
 Requires: python-paramiko
 Requires: python-jinja2
 Requires: python-keyczar
+Requires: python-httplib2
 %endif
 Requires: sshpass
 
@@ -68,6 +70,7 @@ rm -rf $RPM_BUILD_ROOT
 %{python_sitelib}/ansible*
 %{_bindir}/ansible*
 %dir %{_datadir}/ansible
+%dir %{_datadir}/ansible/*
 %{_datadir}/ansible/*/*
 %config(noreplace) %{_sysconfdir}/ansible
 %doc README.md PKG-INFO COPYING
@@ -77,6 +80,12 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+
+* Fri Dec 20 2013 Michael DeHaan <michael.dehaan@gmail.com> - 1.4.3
+* Release 1.4.3
+
+* Wed Dec 18 2013 Michael DeHaan <michael.dehaan@gmail.com> - 1.4.2
+* Release 1.4.2
 
 * Wed Nov 27 2013 Michael DeHaan <michael.dehaan@gmail.com> - 1.4.1
 * Release 1.4.1
