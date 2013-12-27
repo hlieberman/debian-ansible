@@ -13,7 +13,7 @@ Vcs-Browser: http://anonscm.debian.org/?p=collab-maint/ansible.git
 Package: ansible
 Architecture: all
 Depends: ${misc:Depends}, ${python:Depends}, python-yaml, python-paramiko,
- python-jinja2
+ python-jinja2, python-httplib2
 Description: Configuration management, deployment, and task execution system
  Ansible is a radically simple model-driven configuration management,
  multi-node deployment, and remote task execution system. Ansible works
