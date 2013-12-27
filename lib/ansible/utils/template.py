@@ -102,7 +102,7 @@ def _legacy_varFindLimitSpace(basedir, vars, space, part, lookup_fatal, depth, e
     if space is None:
         return space
     # A part with escaped .s in it is compounded by { and }, remove them
-    if part[0] == '{' and part[-1] == '}':
+    if len(part) > 0 and part[0] == '{' and part[-1] == '}':
         part = part[1:-1]
     # Template part to resolve variables within (${var$var2})
     part = legacy_varReplace(basedir, part, vars, lookup_fatal=lookup_fatal, depth=depth + 1, expand_lists=expand_lists)
@@ -532,13 +532,14 @@ def template_from_string(basedir, data, vars, fail_on_undefined=False):
             return lookup(*args, basedir=basedir, **kwargs)
 
         t.globals['lookup'] = my_lookup
-
-        
-
         jvars =_jinja2_vars(basedir, vars, t.globals, fail_on_undefined)
         new_context = t.new_context(jvars, shared=True)
         rf = t.root_render_func(new_context)
-        res = jinja2.utils.concat(rf)
+        try:
+            res = jinja2.utils.concat(rf)
+        except TypeError, te:
+            if 'StrictUndefined' in str(te):
+                raise errors.AnsibleUndefinedVariable("unable to look up a name or access an attribute in template string")
         return res
     except (jinja2.exceptions.UndefinedError, errors.AnsibleUndefinedVariable):
         if fail_on_undefined:
