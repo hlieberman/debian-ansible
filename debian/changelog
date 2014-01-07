@@ -2,6 +2,8 @@ ansible (1.4.3+dfsg-2) UNRELEASED; urgency=low
 
   * add "Suggests: ansible-doc" to the dependency, thanks to
     Ben Finney (closes: #729350)
+  * Fix Vcs-Browser, thanks to Alessandro Ghedini
+    (closes: #731482)
 
  -- Michael Vogt <michael.vogt@ubuntu.com>  Tue, 07 Jan 2014 10:36:57 +0100
 
