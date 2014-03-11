@@ -1,3 +1,27 @@
+ansible (1.5.2) unstable; urgency=low
+
+  * 1.5.2 release
+ 
+  -- Michael DeHaan <michael@ansible.com>  Mon, 11 March 2014 08:46:00 -0500
+
+ansible (1.5.1) unstable; urgency=low
+
+  * 1.5.1 release
+
+ -- Michael DeHaan <michael@ansible.com>  Mon, 10 March 2014 17:33:44 -0500
+
+ansible (1.5) unstable; urgency=low
+
+  * 1.5 release
+ 
+ -- Michael DeHaan <michael@ansible.com>  Fri, 28 February 2014 00:00:00 -0500
+
+ansible (1.4.5) unstable; urgency=low
+
+  * 1.4.5 release
+
+ -- Michael DeHaan <michael.dehaan@gmail.com>  Wed, 12 February 2014 15:23:11 -0500
+
 ansible (1.4.4) unstable; urgency=low
 
   * 1.4.4 release
@@ -19,7 +43,7 @@ ansible (1.4.2) unstable; urgency=low
 ansible (1.4.1) unstable; urgency=low
 
   * 1.4.1 release
- 
+
  -- Michael DeHaan <michael.dehaan@gmail.com>  Wed, 27 November 2013 15:00:01 -0500
 
 ansible (1.4) unstable; urgency=low

@@ -26,6 +26,56 @@ options:
   api_key:
     description:
       - Rackspace API key (overrides I(credentials))
+    aliases:
+      - password
+  auth_endpoint:
+    description:
+      - The URI of the authentication service
+    default: https://identity.api.rackspacecloud.com/v2.0/
+    version_added: 1.5
+  credentials:
+    description:
+      - File to find the Rackspace credentials in (ignored if I(api_key) and
+        I(username) are provided)
+    default: null
+    aliases:
+      - creds_file
+  env:
+    description:
+      - Environment as configured in ~/.pyrax.cfg,
+        see U(https://github.com/rackspace/pyrax/blob/master/docs/getting_started.md#pyrax-configuration)
+    version_added: 1.5
+  identity_type:
+    description:
+      - Authentication machanism to use, such as rackspace or keystone
+    default: rackspace
+    version_added: 1.5
+  region:
+    description:
+      - Region to create an instance in
+    default: DFW
+  tenant_id:
+    description:
+      - The tenant ID used for authentication
+    version_added: 1.5
+  tenant_name:
+    description:
+      - The tenant name used for authentication
+    version_added: 1.5
+  username:
+    description:
+      - Rackspace username (overrides I(credentials))
+  verify_ssl:
+    description:
+      - Whether or not to require SSL validation of API endpoints
+    version_added: 1.5
+  auto_increment:
+    description:
+      - Whether or not to increment a single number with the name of the
+        created servers. Only applicable when used with the I(group) attribute
+        or meta key.
+    default: yes
+    version_added: 1.5
   count:
     description:
       - number of instances to launch
@@ -36,12 +86,6 @@ options:
       - number count to start at
     default: 1
     version_added: 1.4
-  credentials:
-    description:
-      - File to find the Rackspace credentials in (ignored if I(api_key) and
-        I(username) are provided)
-    default: null
-    aliases: ['creds_file']
   disk_config:
     description:
       - Disk partitioning strategy
@@ -96,18 +140,11 @@ options:
         or C(label).
     default: ['public', 'private']
     version_added: 1.4
-  region:
-    description:
-      - Region to create an instance in
-    default: DFW
   state:
     description:
       - Indicate desired state of the resource
     choices: ['present', 'absent']
     default: present
-  username:
-    description:
-      - Rackspace username (overrides I(credentials))
   wait:
     description:
       - wait for the instance to be in state 'running' before returning
@@ -147,6 +184,26 @@ EXAMPLES = '''
         networks:
           - private
           - public
+      register: rax
+
+- name: Build an exact count of cloud servers with incremented names
+  hosts: local
+  gather_facts: False
+  tasks:
+    - name: Server build requests
+      local_action:
+        module: rax
+        credentials: ~/.raxpub
+        name: test%03d.example.org
+        flavor: performance1-1
+        image: ubuntu-1204-lts-precise-pangolin
+        state: present
+        count: 10
+        count_offset: 10
+        exact_count: yes
+        group: test
+        wait: yes
+      register: rax
 '''
 
 import sys
@@ -199,7 +256,7 @@ def create(module, names, flavor, image, meta, key_name, files,
         lpath = os.path.expanduser(files[rpath])
         try:
             fileobj = open(lpath, 'r')
-            files[rpath] = fileobj
+            files[rpath] = fileobj.read()
         except Exception, e:
             module.fail_json(msg='Failed to load %s' % lpath)
     try:
@@ -347,7 +404,8 @@ def delete(module, instance_ids, wait, wait_timeout):
 
 def cloudservers(module, state, name, flavor, image, meta, key_name, files,
                  wait, wait_timeout, disk_config, count, group,
-                 instance_ids, exact_count, networks, count_offset):
+                 instance_ids, exact_count, networks, count_offset,
+                 auto_increment):
     cs = pyrax.cloudservers
     cnw = pyrax.cloud_networks
     servers = []
@@ -358,6 +416,15 @@ def cloudservers(module, state, name, flavor, image, meta, key_name, files,
     elif 'group' in meta and group is None:
         group = meta['group']
 
+    # When using state=absent with group, the absent block won't match the
+    # names properly. Use the exact_count functionality to decrease the count
+    # to the desired level
+    was_absent = False
+    if group is not None and state == 'absent':
+        exact_count = True
+        state = 'present'
+        was_absent = True
+
     # Check if the provided image is a UUID and if not, search for an
     # appropriate image using human_id and name
     if image:
@@ -366,12 +433,12 @@ def cloudservers(module, state, name, flavor, image, meta, key_name, files,
         except ValueError:
             try:
                 image = cs.images.find(human_id=image)
-            except (pyrax.exceptions.NotFound,
-                    pyrax.exceptions.NoUniqueMatch):
+            except(cs.exceptions.NotFound,
+                   cs.exceptions.NoUniqueMatch):
                 try:
                     image = cs.images.find(name=image)
-                except (pyrax.exceptions.NotFound,
-                        pyrax.exceptions.NoUniqueMatch):
+                except (cs.exceptions.NotFound,
+                        cs.exceptions.NoUniqueMatch):
                     module.fail_json(msg='No matching image found (%s)' %
                                          image)
 
@@ -416,27 +483,43 @@ def cloudservers(module, state, name, flavor, image, meta, key_name, files,
                 module.fail_json(msg='"group" must be provided when using '
                                      '"exact_count"')
             else:
-                numbers = set()
+                if auto_increment:
+                    numbers = set()
 
-                try:
-                    name % 0
-                except TypeError, e:
-                    if e.message.startswith('not all'):
-                        name = '%s%%d' % name
+                    try:
+                        name % 0
+                    except TypeError, e:
+                        if e.message.startswith('not all'):
+                            name = '%s%%d' % name
+                        else:
+                            module.fail_json(msg=e.message)
+
+                    pattern = re.sub(r'%\d*[sd]', r'(\d+)', name)
+                    for server in cs.servers.list():
+                        if server.metadata.get('group') == group:
+                            servers.append(server)
+                        match = re.search(pattern, server.name)
+                        if match:
+                            number = int(match.group(1))
+                            numbers.add(number)
+
+                    number_range = xrange(count_offset, count_offset + count)
+                    available_numbers = list(set(number_range)
+                                             .difference(numbers))
+                else:
+                    for server in cs.servers.list():
+                        if server.metadata.get('group') == group:
+                            servers.append(server)
+
+                # If state was absent but the count was changed,
+                # assume we only wanted to remove that number of instances
+                if was_absent:
+                    diff = len(servers) - count
+                    if diff < 0:
+                        count = 0
                     else:
-                        module.fail_json(msg=e.message)
+                        count = diff
 
-                pattern = re.sub(r'%\d+[sd]', r'(\d+)', name)
-                for server in cs.servers.list():
-                    if server.metadata.get('group') == group:
-                        servers.append(server)
-                    match = re.search(pattern, server.name)
-                    if match:
-                        number = int(match.group(1))
-                        numbers.add(number)
-
-                number_range = xrange(count_offset, count_offset + count)
-                available_numbers = list(set(number_range).difference(numbers))
                 if len(servers) > count:
                     state = 'absent'
                     del servers[:count]
@@ -445,48 +528,55 @@ def cloudservers(module, state, name, flavor, image, meta, key_name, files,
                         instance_ids.append(server.id)
                     delete(module, instance_ids, wait, wait_timeout)
                 elif len(servers) < count:
-                    names = []
-                    numbers_to_use = available_numbers[:count - len(servers)]
-                    for number in numbers_to_use:
-                        names.append(name % number)
+                    if auto_increment:
+                        names = []
+                        name_slice = count - len(servers)
+                        numbers_to_use = available_numbers[:name_slice]
+                        for number in numbers_to_use:
+                            names.append(name % number)
+                    else:
+                        names = [name] * (count - len(servers))
                 else:
                     module.exit_json(changed=False, action=None, instances=[],
                                      success=[], error=[], timeout=[],
                                      instance_ids={'instances': [],
                                                    'success': [], 'error': [],
                                                    'timeout': []})
-
         else:
             if group is not None:
-                numbers = set()
+                if auto_increment:
+                    numbers = set()
 
-                try:
-                    name % 0
-                except TypeError, e:
-                    if e.message.startswith('not all'):
-                        name = '%s%%d' % name
-                    else:
-                        module.fail_json(msg=e.message)
+                    try:
+                        name % 0
+                    except TypeError, e:
+                        if e.message.startswith('not all'):
+                            name = '%s%%d' % name
+                        else:
+                            module.fail_json(msg=e.message)
 
-                pattern = re.sub(r'%\d+[sd]', r'(\d+)', name)
-                for server in cs.servers.list():
-                    if server.metadata.get('group') == group:
-                        servers.append(server)
-                    match = re.search(pattern, server.name)
-                    if match:
-                        number = int(match.group(1))
-                        numbers.add(number)
+                    pattern = re.sub(r'%\d*[sd]', r'(\d+)', name)
+                    for server in cs.servers.list():
+                        if server.metadata.get('group') == group:
+                            servers.append(server)
+                        match = re.search(pattern, server.name)
+                        if match:
+                            number = int(match.group(1))
+                            numbers.add(number)
 
-                number_range = xrange(count_offset,
-                                      count_offset + count + len(numbers))
-                available_numbers = list(set(number_range).difference(numbers))
-                names = []
-                numbers_to_use = available_numbers[:count]
-                for number in numbers_to_use:
-                    names.append(name % number)
+                    number_range = xrange(count_offset,
+                                          count_offset + count + len(numbers))
+                    available_numbers = list(set(number_range)
+                                             .difference(numbers))
+                    names = []
+                    numbers_to_use = available_numbers[:count]
+                    for number in numbers_to_use:
+                        names.append(name % number)
+                else:
+                    names = [name] * count
             else:
                 search_opts = {
-                    'name': name,
+                    'name': '^%s$' % name,
                     'image': image,
                     'flavor': flavor
                 }
@@ -522,7 +612,7 @@ def cloudservers(module, state, name, flavor, image, meta, key_name, files,
                     module.fail_json(msg='%s is required for the "rax" '
                                          'module' % arg)
             search_opts = {
-                'name': name,
+                'name': '^%s$' % name,
                 'image': image,
                 'flavor': flavor
             }
@@ -549,13 +639,13 @@ def cloudservers(module, state, name, flavor, image, meta, key_name, files,
 
 
 def main():
-    module = AnsibleModule(
-        argument_spec=dict(
-            api_key=dict(),
+    argument_spec = rax_argument_spec()
+    argument_spec.update(
+        dict(
+            auto_increment=dict(choices=BOOLEANS, default=True, type='bool'),
             count=dict(default=1, type='int'),
             count_offset=dict(default=1, type='int'),
-            credentials=dict(aliases=['creds_file']),
-            disk_config=dict(default='auto', choices=['auto', 'manual']),
+            disk_config=dict(choices=['auto', 'manual']),
             exact_count=dict(choices=BOOLEANS, default=False, type='bool'),
             files=dict(type='dict', default={}),
             flavor=dict(),
@@ -566,13 +656,16 @@ def main():
             meta=dict(type='dict', default={}),
             name=dict(),
             networks=dict(type='list', default=['public', 'private']),
-            region=dict(),
             service=dict(),
             state=dict(default='present', choices=['present', 'absent']),
-            username=dict(),
             wait=dict(choices=BOOLEANS, default=False, type='bool'),
             wait_timeout=dict(default=300),
-        ),
+        )
+    )
+
+    module = AnsibleModule(
+        argument_spec=argument_spec,
+        required_together=rax_required_together(),
     )
 
     service = module.params.get('service')
@@ -582,11 +675,12 @@ def main():
                              'please remove "service: cloudservers" from your '
                              'playbook pertaining to the "rax" module')
 
-    api_key = module.params.get('api_key')
+    auto_increment = module.params.get('auto_increment')
     count = module.params.get('count')
     count_offset = module.params.get('count_offset')
-    credentials = module.params.get('credentials')
-    disk_config = module.params.get('disk_config').upper()
+    disk_config = module.params.get('disk_config')
+    if disk_config:
+        disk_config = disk_config.upper()
     exact_count = module.params.get('exact_count', False)
     files = module.params.get('files')
     flavor = module.params.get('flavor')
@@ -597,42 +691,21 @@ def main():
     meta = module.params.get('meta')
     name = module.params.get('name')
     networks = module.params.get('networks')
-    region = module.params.get('region')
     state = module.params.get('state')
-    username = module.params.get('username')
     wait = module.params.get('wait')
     wait_timeout = int(module.params.get('wait_timeout'))
 
-    # Setup the credentials and region
-    try:
-        username = username or os.environ.get('RAX_USERNAME')
-        api_key = api_key or os.environ.get('RAX_API_KEY')
-        credentials = (credentials or os.environ.get('RAX_CREDENTIALS') or
-                       os.environ.get('RAX_CREDS_FILE'))
-        region = region or os.environ.get('RAX_REGION')
-
-    except KeyError, e:
-        module.fail_json(msg='Unable to load %s' % e.message)
-
-    # setup the auth
-    try:
-        pyrax.set_setting('identity_type', 'rackspace')
-        if api_key and username:
-            pyrax.set_credentials(username, api_key=api_key, region=region)
-        elif credentials:
-            credentials = os.path.expanduser(credentials)
-            pyrax.set_credential_file(credentials, region=region)
-        else:
-            raise Exception('No credentials supplied!')
-    except Exception, e:
-        module.fail_json(msg='%s' % e.message)
+    setup_rax_module(module, pyrax)
 
     cloudservers(module, state, name, flavor, image, meta, key_name, files,
                  wait, wait_timeout, disk_config, count, group,
-                 instance_ids, exact_count, networks, count_offset)
+                 instance_ids, exact_count, networks, count_offset,
+                 auto_increment)
 
 
+# import module snippets
 from ansible.module_utils.basic import *
+from ansible.module_utils.rax import *
 
 ### invoke the module
 main()

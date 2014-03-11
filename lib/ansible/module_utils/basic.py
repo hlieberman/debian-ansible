@@ -59,6 +59,7 @@ import grp
 import pwd
 import platform
 import errno
+import tempfile
 
 try:
     import json
@@ -111,7 +112,9 @@ FILE_COMMON_ARGUMENTS=dict(
     content = dict(),
     backup = dict(),
     force = dict(),
+    remote_src = dict(), # used by assemble
 )
+
 
 def get_platform():
     ''' what's the platform?  example: Linux is a platform. '''
@@ -122,8 +125,11 @@ def get_distribution():
     if platform.system() == 'Linux':
         try:
             distribution = platform.linux_distribution()[0].capitalize()
-            if distribution == 'NA':
-                if os.path.is_file('/etc/system-release'):
+            if not distribution and os.path.isfile('/etc/system-release'):
+                distribution = platform.linux_distribution(supported_dists=['system'])[0].capitalize()
+                if 'Amazon' in distribution:
+                    distribution = 'Amazon'
+                else:
                     distribution = 'OtherLinux'
         except:
             # FIXME: MethodMissing, I assume?
@@ -172,6 +178,7 @@ class AnsibleModule(object):
         self.argument_spec = argument_spec
         self.supports_check_mode = supports_check_mode
         self.check_mode = False
+        self.no_log = no_log
         
         self.aliases = {}
         
@@ -183,13 +190,18 @@ class AnsibleModule(object):
         os.environ['LANG'] = MODULE_LANG
         (self.params, self.args) = self._load_params()
 
-        self._legal_inputs = [ 'CHECKMODE' ]
+        self._legal_inputs = ['CHECKMODE', 'NO_LOG']
         
         self.aliases = self._handle_aliases()
 
         if check_invalid_arguments:
             self._check_invalid_arguments()
         self._check_for_check_mode()
+        self._check_for_no_log()
+
+        # check exclusive early 
+        if not bypass_checks:
+            self._check_mutually_exclusive(mutually_exclusive)
 
         self._set_defaults(pre=True)
 
@@ -197,12 +209,11 @@ class AnsibleModule(object):
             self._check_required_arguments()
             self._check_argument_values()
             self._check_argument_types()
-            self._check_mutually_exclusive(mutually_exclusive)
             self._check_required_together(required_together)
             self._check_required_one_of(required_one_of)
 
         self._set_defaults(pre=False)
-        if not no_log:
+        if not self.no_log:
             self._log_invocation()
 
     def load_file_common_arguments(self, params):
@@ -555,10 +566,16 @@ class AnsibleModule(object):
                 if self.supports_check_mode:
                     self.check_mode = True
 
+    def _check_for_no_log(self):
+        for (k,v) in self.params.iteritems():
+            if k == 'NO_LOG':
+                self.no_log = self.boolean(v)
+
     def _check_invalid_arguments(self):
         for (k,v) in self.params.iteritems():
-            if k == 'CHECKMODE':
-                continue
+            # these should be in legal inputs already
+            #if k in ('CHECKMODE', 'NO_LOG'):
+            #    continue
             if k not in self._legal_inputs:
                 self.fail_json(msg="unsupported parameter for module: %s" % k)
 
@@ -703,6 +720,12 @@ class AnsibleModule(object):
                         self.params[k] = int(value)
                     else:
                         is_invalid = True
+            elif wanted == 'float':
+                if not isinstance(value, float):
+                    if isinstance(value, basestring):
+                        self.params[k] = float(value)
+                    else:
+                        is_invalid = True
             else:
                 self.fail_json(msg="implementation error: unknown type %s requested for %s" % (wanted, k))
 
@@ -742,7 +765,13 @@ class AnsibleModule(object):
         # Sanitize possible password argument when logging.
         log_args = dict()
         passwd_keys = ['password', 'login_password']
-        
+
+        filter_re = [
+            # filter out things like user:pass@foo/whatever
+            # and http://username:pass@wherever/foo
+            re.compile('^(?P<before>.*:)(?P<password>.*)(?P<after>\@.*)$'), 
+        ]
+
         for param in self.params:
             canon  = self.aliases.get(param, param)
             arg_opts = self.argument_spec.get(canon, {})
@@ -753,12 +782,27 @@ class AnsibleModule(object):
             elif param in passwd_keys:
                 log_args[param] = 'NOT_LOGGING_PASSWORD'
             else:
-                log_args[param] = self.params[param]
+                found = False
+                for filter in filter_re:
+                    if isinstance(self.params[param], unicode):
+                        m = filter.match(self.params[param])
+                    else:
+                        m = filter.match(str(self.params[param]))
+                    if m:
+                        d = m.groupdict()
+                        log_args[param] = d['before'] + "********" + d['after']
+                        found = True
+                        break
+                if not found:
+                    log_args[param] = self.params[param]
 
         module = 'ansible-%s' % os.path.basename(__file__)
         msg = ''
         for arg in log_args:
-            msg = msg + arg + '=' + str(log_args[arg]) + ' '
+            if isinstance(log_args[arg], unicode):
+                msg = msg + arg + '=' + log_args[arg] + ' '
+            else:
+                msg = msg + arg + '=' + str(log_args[arg]) + ' '
         if msg:
             msg = 'Invoked with %s' % msg
         else:
@@ -773,11 +817,11 @@ class AnsibleModule(object):
                 journal.sendv(*journal_args)
             except IOError, e:
                 # fall back to syslog since logging to journal failed
-                syslog.openlog(module, 0, syslog.LOG_USER)
-                syslog.syslog(syslog.LOG_NOTICE, msg)
+                syslog.openlog(str(module), 0, syslog.LOG_USER)
+                syslog.syslog(syslog.LOG_NOTICE, unicode(msg).encode('utf8'))
         else:
-            syslog.openlog(module, 0, syslog.LOG_USER)
-            syslog.syslog(syslog.LOG_NOTICE, msg)
+            syslog.openlog(str(module), 0, syslog.LOG_USER)
+            syslog.syslog(syslog.LOG_NOTICE, unicode(msg).encode('utf8'))
 
     def get_bin_path(self, arg, required=False, opt_dirs=[]):
         '''
@@ -821,7 +865,12 @@ class AnsibleModule(object):
             self.fail_json(msg='Boolean %s not in either boolean list' % arg)
 
     def jsonify(self, data):
-        return json.dumps(data)
+        for encoding in ("utf-8", "latin-1", "unicode_escape"):
+            try:
+                return json.dumps(data, encoding=encoding)
+            except UnicodeDecodeError, e:
+                continue
+        self.fail_json(msg='Invalid unicode encoding encountered')
 
     def from_json(self, data):
         return json.loads(data)
@@ -941,12 +990,13 @@ class AnsibleModule(object):
             # rename might not preserve context
             self.set_context_if_different(dest, context, False)
 
-    def run_command(self, args, check_rc=False, close_fds=False, executable=None, data=None, binary_data=False, path_prefix=None):
+    def run_command(self, args, check_rc=False, close_fds=False, executable=None, data=None, binary_data=False, path_prefix=None, cwd=None, use_unsafe_shell=False):
         '''
         Execute a command, returns rc, stdout, and stderr.
         args is the command to run
         If args is a list, the command will be run with shell=False.
-        Otherwise, the command will be run with shell=True when args is a string.
+        If args is a string and use_unsafe_shell=False it will split args to a list and run with shell=False
+        If args is a string and use_unsafe_shell=True it run with shell=True.
         Other arguments:
         - check_rc (boolean)  Whether to call fail_json in case of
                               non zero RC.  Default is False.
@@ -955,13 +1005,18 @@ class AnsibleModule(object):
         - executable (string) See documentation for subprocess.Popen().
                               Default is None.
         '''
+
+        shell = False
         if isinstance(args, list):
-            shell = False
-        elif isinstance(args, basestring):
+            pass
+        elif isinstance(args, basestring) and use_unsafe_shell:
             shell = True
+        elif isinstance(args, basestring):
+            args = shlex.split(args)
         else:
             msg = "Argument 'args' to run_command must be list or string"
             self.fail_json(rc=257, cmd=args, msg=msg)
+
         rc = 0
         msg = None
         st_in = None
@@ -973,25 +1028,25 @@ class AnsibleModule(object):
 
         if data:
             st_in = subprocess.PIPE
+
+        kwargs = dict(
+            executable=executable,
+            shell=shell,
+            close_fds=close_fds,
+            stdin= st_in,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE 
+        )
+
+        if path_prefix:
+            kwargs['env'] = env
+        if cwd:
+            kwargs['cwd'] = cwd
+
+
         try:
-            if path_prefix is not None:
-                cmd = subprocess.Popen(args,
-                                       executable=executable,
-                                       shell=shell,
-                                       close_fds=close_fds,
-                                       stdin=st_in,
-                                       stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE,
-                                       env=env)
-            else:
-                cmd = subprocess.Popen(args,
-                                       executable=executable,
-                                       shell=shell,
-                                       close_fds=close_fds,
-                                       stdin=st_in,
-                                       stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE)
-            
+            cmd = subprocess.Popen(args, **kwargs)
+
             if data:
                 if not binary_data:
                     data += '\\n'
@@ -1021,5 +1076,4 @@ class AnsibleModule(object):
             if size >= limit:
                 break
         return '%.2f %s' % (float(size)/ limit, suffix)
-
 

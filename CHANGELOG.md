@@ -1,27 +1,108 @@
 Ansible Changes By Release
 ==========================
 
-1.4.4 "Could This Be Magic" - January 06, 2014
+## 1.5.2 "Love Walks In" - March 11, 2014
 
-- Fixed issue with newer versions of pip not having --use-mirrors
+- Fix module errors in airbrake and apt from previous release
 
-1.4.3 "Could This Be Magic?" - December 20, 2013
+## 1.5.1 "Love Walks In" - March 10, 2014
+
+- Force command action to not be executed by the shell unless specifically enabled.
+- Validate SSL certs accessed through urllib*.
+- Implement new default cipher class AES256 in ansible-vault.
+- Misc bug fixes.
+
+## 1.5 "Love Walks In" - February 28, 2014
+
+Major features/changes:
+
+* when_foo which was previously deprecated is now removed, use "when:" instead.  Code generates appropriate error suggestion.
+* include + with_items which was previously deprecated is now removed, ditto.  Use with_nested / with_together, etc.
+* only_if, which is much older than when_foo and was deprecated, is similarly removed.
+* ssh connection plugin is now more efficient if you add 'pipelining=True' in ansible.cfg under [ssh_connection], see example.cfg
+* localhost/127.0.0.1 is not required to be in inventory if referenced, if not in inventory, it does not implicitly appear in the 'all' group.
+* git module has new parameters (accept_hostkey, key_file, ssh_opts) to ease the usage of git and ssh protocols. 
+* when using accelerate mode, the daemon will now be restarted when specifying a different remote_user between plays.
+* added no_log: option for tasks. When used, no logging information will be sent to syslog during the module execution.
+* acl module now handles 'default' and allows for either shorthand entry or specific fields per entry section
+* play_hosts is a new magic variable to provide a list of hosts in scope for the current play.
+* ec2 module now accepts 'exact_count' and 'count_tag' as a way to enforce a running number of nodes by tags.
+* all ec2 modules that work with Eucalyptus also now support a 'validate_certs' option, which can be set to 'off' for installations using self-signed certs.
+* Start of new integration test infrastructure (WIP, more details TBD)
+* if repoquery is unavailble, the yum module will automatically attempt to install yum-utils
+* ansible-vault: a framework for encrypting your playbooks and variable files 
+
+New modules:
+
+* cloud: ec2_elb_lb
+* cloud: ec2_key
+* cloud: ec2_snapshot
+* cloud: rax_dns
+* cloud: rax_dns_record
+* cloud: rax_files
+* cloud: rax_files_objects
+* cloud: rax_keypair
+* cloud: rax_queue
+* cloud: docker_image
+* messaging: rabbitmq_policy
+* system: at
+* utilities: assert
+
+Other notable changes (many new module params & bugfixes may not not listed):
+
+* no_reboot is now defaulted to "no" in the ec2_ami module to ensure filesystem consistency in the resulting AMI.
+* sysctl module overhauled
+* authorized_key module overhauled
+* synchronized module now handles local transport better
+* apt_key module now ignores case on keys
+* zypper_repository now skips on check mode
+* file module now responds to force behavior when dealing with hardlinks
+* new lookup plugin 'csvfile'
+* fixes to allow hash_merge behavior to work with dynamic inventory
+* mysql module will use port argument on dump/import
+* subversion module now ignores locale to better intercept status messages
+* rax api_key argument is no longer logged
+* backwards/forwards compatibility for OpenStack modules, 'quantum' modules grok neutron renaming
+* hosts properly uniqueified if appearing in redundant groups
+* hostname module support added for ScientificLinux
+* ansible-pull can now show live stdout and pass verbosity levels to ansible-playbook
+* ec2 instances can now be stopped or started
+* additional volumes can be created when creating new ec2 instances
+* user module can move a home directory
+* significant enhancement and cleanup of rackspace modules
+* ansible_ssh_private_key_file can be templated
+* docker module updated to support docker-py 0.3.0
+* various other bug fixes
+* md5 logic improved during sudo operation
+* support for ed25519 keys in authorized_key module
+* ability to set directory permissions during a recursive copy (directory_mode parameter)
+* update docker module, support for using docker python library 0.3.0
+
+## 1.4.5 "Could This Be Magic" - February 12, 2014
+
+- fixed issue with permissions being incorrect on fireball/accelerate keys when the umask setting was too loose.
+
+## 1.4.4 "Could This Be Magic" - January 6, 2014
+
+- fixed a minor issue with newer versions of pip dropping the "use-mirrors" parameter.
+
+## 1.4.3 "Could This Be Magic" - December 20, 2013
 
 - Fixed role_path parsing from ansible.cfg
 - Fixed default role templates
 
-1.4.2 "Could This Be Magic" - December 18, 2013
+## 1.4.2 "Could This Be Magic" - December 18, 2013
 
-- Fixed a few bugs related to unicode
-- Fixed errors in the ssh connection method with large data returns
-- Miscellaneous fixes for a few modules
-- Add the ansible-galaxy command
+* Fixed a few bugs related to unicode
+* Fixed errors in the ssh connection method with large data returns
+* Miscellaneous fixes for a few modules
+* Add the ansible-galaxy command
 
-1.4.1 "Could This Be Magic" - November 27, 2013
+## 1.4.1 "Could This Be Magic" - November 27, 2013
 
-- Misc fix updates
+* Misc fixes to accelerate mode and various modules.
 
-1.4 "Could This Be Magic" - November 21, 2013
+## 1.4 "Could This Be Magic" - November 21, 2013
 
 Highlighted new features:
 
@@ -132,16 +213,16 @@ Misc changes (all module additions/fixes may not listed):
 * get_url module now understands content-disposition headers for deciding filenames
 * it is possible to have subdirectories in between group_vars/ and host_vars/ and the final filename, like host_vars/rack42/asdf for the variables for host 'asdf'.  The intermediate directories are ignored, and do not put a file in there twice.
 
-1.3.4 "Top of the World" (reprise) - October 29, 2013
+## 1.3.4 "Top of the World" (reprise) - October 29, 2013
 
 * Fixed a bug in the copy module, where a filename containing the string "raw" was handled incorrectly
 * Fixed a bug in accelerate mode, where copying a zero-length file out would fail
 
-1.3.3 "Top of the World" (reprise) - October 9, 2013
+## 1.3.3 "Top of the World" (reprise) - October 9, 2013
 
 Additional fixes for accelerate mode.
 
-1.3.2 "Top of the World" (reprise) - September 19th, 2013
+## 1.3.2 "Top of the World" (reprise) - September 19th, 2013
 
 Multiple accelerate mode fixes:
 
@@ -154,11 +235,11 @@ Multiple accelerate mode fixes:
 * Fixed bug in apt_repository module where the repository cache was not being updated.
 * Fixed bug where "too many open files" errors would be encountered due to pseudo TTY's not being closed properly.
 
-1.3.1 "Top of the World" (reprise) - September 16th, 2013
+## 1.3.1 "Top of the World" (reprise) - September 16th, 2013
 
 Fixing a bug in accelerate mode whereby the gather_facts step would always be run via sudo regardless of the play settings.
 
-1.3 "Top of the World" - September 13th, 2013
+## 1.3 "Top of the World" - September 13th, 2013
 
 Highlighted new features:
 
@@ -298,12 +379,12 @@ Misc changes:
 * added new example inventory plugin for Red Hat OpenShift
 * and other misc. bugfixes
 
-1.2.3 "Hear About It Later" (reprise) -- Aug 21, 2013
+## 1.2.3 "Hear About It Later" (reprise) -- Aug 21, 2013
 
 * Local security fixes for predictable file locations for ControlPersist and retry file paths on shared machines
 on operating systems without kernel symlink/hardlink protections.
 
-1.2.2 "Hear About It Later" (reprise) -- July 4, 2013
+## 1.2.2 "Hear About It Later" (reprise) -- July 4, 2013
 
 * Added a configuration file option [paramiko_connection] record_host_keys which allows the code that paramiko uses
 to update known_hosts to be disabled.  This is done because paramiko can be very slow at doing this if you have a
@@ -311,7 +392,7 @@ large number of hosts and some folks may not want this behavior.  This can be to
 and does not affect the ssh transport plugin.  Use of the ssh transport plugin is preferred if you have ControlPersist
 capability, and Ansible by default in 1.2.1 and later will autodetect.
 
-1.2.1 "Hear About It Later" -- July 4, 2013
+## 1.2.1 "Hear About It Later" -- July 4, 2013
 
 * Connection default is now "smart", which discovers if the system openssh can support ControlPersist, and uses
   it if so, if not falls back to paramiko.
@@ -320,7 +401,7 @@ capability, and Ansible by default in 1.2.1 and later will autodetect.
 * Paramiko now records host keys it was in contact with host key checking is on.  It is somewhat sluggish when doing this,
   so switch to the 'ssh' transport if this concerns you.
 
-1.2 "Right Now" -- June 10, 2013
+## 1.2 "Right Now" -- June 10, 2013
 
 Core Features:
 
@@ -455,7 +536,7 @@ the variable is still registered for the host, with the attribute skipped: True.
 * NetBSD and OpenBSD support for the user and groups modules
 * Add encrypted password support to password lookup
 
-1.1 "Mean Street" -- 4/2/2013
+## 1.1 "Mean Street" -- 4/2/2013
 
 Core Features
 
@@ -594,7 +675,7 @@ Plugins:
 * fixed ~ expansion for fileglob
 * with_nested allows for nested loops (see examples in examples/playbooks)
 
-1.0 "Eruption" -- Feb 1 2013
+## 1.0 "Eruption" -- Feb 1 2013
 
 New modules:
 
@@ -673,7 +754,7 @@ Inventory files/scripts:
 * whitespace is now allowed around group variables in the inventory file
 * inventory scripts can now define groups of groups and group vars (need example for docs?)
 
-0.9 "Dreams" -- Nov 30 2012
+## 0.9 "Dreams" -- Nov 30 2012
 
 Highlighted core changes:
 
@@ -753,7 +834,7 @@ Plugin changes:
 * various tweaks to the EC2 inventory plugin
 * jinja2 filters are now pluggable so it's easy to write your own (to_json/etc, are now impl. as such)
 
-0.8 "Cathedral" -- Oct 19, 2012
+## 0.8 "Cathedral" -- Oct 19, 2012
 
 Highlighted Core Changes:
 
@@ -779,7 +860,7 @@ Other Core Changes:
 * ability to access inventory variables via 'hostvars' for hosts not yet included in any play, using on demand lookups
 * merged ansible-plugins, ansible-resources, and ansible-docs into the main project
 * you can set ANSIBLE_NOCOWS=1 if you want to disable cowsay if it is installed.  Though no one should ever want to do this!  Cows are great!
-* you can set ANSIBLE_FORCECOLOR=1 to force color mode even when running without a TTY
+* you can set ANSIBLE_FORCE_COLOR=1 to force color mode even when running without a TTY
 * fatal errors are now properly colored red.
 * skipped messages are now cyan, to differentiate them from unchanged messages.
 * extensive documentation upgrades
@@ -850,7 +931,7 @@ Other module Changes, Upgrades, and Fixes:
 * selinux policy is only required if setting to not disabled
 * various fixes for yum module when working with packages not in any present repo
 
-0.7 "Panama" -- Sept 6 2012
+## 0.7 "Panama" -- Sept 6 2012
 
 Module changes:
 
@@ -914,7 +995,7 @@ Playbooks:
 * adds 'serial' to playbook, allowing you to specify how many hosts can be processing a playbook at one time (default 0=all)
 * adds 'local_action: <action parameters>' as an alias to 'delegate_to: 127.0.0.1'
 
-0.6 "Cabo" -- August 6, 2012
+## 0.6 "Cabo" -- August 6, 2012
 
 playbooks:
 
@@ -974,7 +1055,7 @@ internals:
 * ./hacking/test-module now supports options like ansible takes and has a debugger mode
 * sudoing to a user other than root now works more seamlessly (uses /tmp, avoids umask issues)
 
-0.5 "Amsterdam" ------- July 04, 2012
+## 0.5 "Amsterdam" ------- July 04, 2012
 
 * Service module gets more accurate service states when running with upstart
 * Jinja2 usage in playbooks (not templates), reinstated, supports %include directive
@@ -1002,7 +1083,7 @@ internals:
 * basic setup module support for Solaris
 * ./library relative to the playbook is always in path so modules can be included in tarballs with playbooks
 
-0.4 "Unchained" ------- May 23, 2012
+## 0.4 "Unchained" ------- May 23, 2012
 
 Internals/Core
 * internal inventory API now more object oriented, parsers decoupled
@@ -1057,7 +1138,7 @@ Misc Bugfixes
 * fix to internals of hacking/test-module development script
 
 
-0.3 "Baluchitherium" -- April 23, 2012
+## 0.3 "Baluchitherium" -- April 23, 2012
 
 * Packaging for Debian, Gentoo, and Arch
 * Improvements to the apt and yum modules
@@ -1087,7 +1168,7 @@ in kickstarts
 * fetch module for pulling in files from remote hosts
 * command task supports creates=foo for idempotent semantics, won't run if file foo already exists
 
-0.0.2 and 0.0.1
+## 0.0.2 and 0.0.1
 
 * Initial stages of project
 

@@ -1,4 +1,4 @@
-# (c) 2012, Michael DeHaan <michael.dehaan@gmail.com>
+# (c) 2012-2014, Michael DeHaan <michael.dehaan@gmail.com>
 #
 # This file is part of Ansible
 #
@@ -32,6 +32,9 @@ class ActionModule(object):
         if module_name == 'shell':
             module_name = 'command'
             module_args += " #USE_SHELL"
+
+        if tmp.find("tmp") == -1:
+            tmp = self.runner._make_tmp_path(conn)
 
         (module_path, is_new_style, shebang) = self.runner._copy_module(conn, tmp, module_name, module_args, inject, complex_args=complex_args)
         self.runner._low_level_exec_command(conn, "chmod a+rx %s" % module_path, tmp)

@@ -1,22 +1,28 @@
 The Ansible Configuration File
 ++++++++++++++++++++++++++++++
 
+.. contents:: Topics
+
 .. highlight:: bash
 
-Certain things in Ansible are adjustable in a configuration file.  In general, the stock configuration is probably
-right for most users, but that doesn't mean you might not want to change them.
+Certain settings in Ansible are adjustable via a configuration file.  The stock configuration should be sufficient
+for most users, but there may be reasons you would want to change them.
 
-The mechanism for doing this is the "ansible.cfg" file, which is looked for in the following locations::
+Changes can be made and used in a configuration file which will be processed in the following order::
 
+    * ANSIBLE_CONFIG (an environment variable)
+    * ansible.cfg (in the current directory)
+    * .ansible.cfg (in the home directory)
     * /etc/ansible/ansible.cfg
-    * ~/.ansible.cfg
-    * ansible.cfg (in the playbook directory)
 
-If multiple file locations matching the above exist, the last location on the above list is used.  Settings in files
-are not merged together.  
+Prior to 1.5 the order was::
 
-.. contents::
-   :depth: 2
+    * ansible.cfg (in the current directory)
+    * ANSIBLE_CONFIG (an environment variable)
+    * .ansible.cfg (in the home directory)
+    * /etc/ansible/ansible.cfg
+
+Ansible will process the above list and use the first file found. Settings in files are not merged together.
 
 .. _getting_the_latest_configuration:
 
@@ -84,6 +90,8 @@ The default configuration shows who modified a file and when::
 
 This is useful to tell users that a file has been placed by Ansible and manual changes are likely to be overwritten.
 
+Note that if using this feature, and there is a date in the string, the template will be reported changed each time as the date is updated.
+
 .. _ask_pass:
 
 ask_pass
@@ -115,7 +123,7 @@ callback_plugins
 This is a developer-centric feature that allows low-level extensions around Ansible to be loaded from
 different locations::
 
-   action_plugins = /usr/share/ansible_plugins/action_plugins
+   callback_plugins = /usr/share/ansible_plugins/callback_plugins
 
 Most users will not need to use this feature.  See :doc:`developing_plugins` for more details
 
@@ -127,7 +135,7 @@ connection_plugins
 This is a developer-centric feature that allows low-level extensions around Ansible to be loaded from
 different locations::
 
-   action_plugins = /usr/share/ansible_plugins/action_plugins
+   connection_plugins = /usr/share/ansible_plugins/connection_plugins
 
 Most users will not need to use this feature.  See :doc:`developing_plugins` for more details
 
@@ -186,7 +194,7 @@ filter_plugins
 This is a developer-centric feature that allows low-level extensions around Ansible to be loaded from
 different locations::
 
-   action_plugins = /usr/share/ansible_plugins/action_plugins
+   filter_plugins = /usr/share/ansible_plugins/filter_plugins
 
 Most users will not need to use this feature.  See :doc:`developing_plugins` for more details
 
@@ -208,7 +216,7 @@ hash_behaviour
 ==============
 
 Ansible by default will override variables in specific precedence orders, as described in :doc:`playbooks_variables`.  When a variable
-of higher precedence wins, it will replace the other value.  
+of higher precedence wins, it will replace the other value.
 
 Some users prefer that variables that are hashes (aka 'dictionaries' in Python terms) are merged together.  This setting is called 'merge'. This is not the default behavior and it does not affect variables whose values are scalars (integers, strings) or
 arrays.  We generally recommend not using this setting unless you think you have an absolute need for it, and playbooks in the
@@ -288,7 +296,7 @@ the user running Ansible has permissions on the logfile::
 This behavior is not on by default.  Note that ansible will, without this setting, record module arguments called to the
 syslog of managed machines.  Password arguments are excluded.
 
-For Enterprise users seeking more detailed logging history, you may be interested in `AnsibleWorks AWX <http://ansibleworks.com/ansibleworks-awx>`_.
+For Enterprise users seeking more detailed logging history, you may be interested in :doc:`tower`.
 
 .. _lookup_plugins:
 
@@ -298,7 +306,7 @@ lookup_plugins
 This is a developer-centric feature that allows low-level extensions around Ansible to be loaded from
 different locations::
 
-   action_plugins = /usr/share/ansible_plugins/action_plugins
+   lookup_plugins = /usr/share/ansible_plugins/lookup_plugins
 
 Most users will not need to use this feature.  See :doc:`developing_plugins` for more details
 
@@ -319,7 +327,7 @@ nocolor
 =======
 
 By default ansible will try to colorize output to give a better indication of failure and status information.
-If you dislike this behavior you can turn it off by setting 'nocolor' to 0::
+If you dislike this behavior you can turn it off by setting 'nocolor' to 1::
 
    nocolor=0
 
@@ -385,7 +393,7 @@ remote_tmp
 Ansible works by transferring modules to your remote machines, running them, and then cleaning up after itself.  In some
 cases, you may not wish to use the default location and would like to change the path.  You can do so by altering this
 setting::
-   
+
     remote_tmp = $HOME/.ansible/tmp
 
 The default is to use a subdirectory of the user's home directory.  Ansible will then choose a random directory name
@@ -477,7 +485,7 @@ vars_plugins
 This is a developer-centric feature that allows low-level extensions around Ansible to be loaded from
 different locations::
 
-   action_plugins = /usr/share/ansible_plugins/action_plugins
+   vars_plugins = /usr/share/ansible_plugins/vars_plugins
 
 Most users will not need to use this feature.  See :doc:`developing_plugins` for more details
 
@@ -517,8 +525,8 @@ If set, this will pass a specific set of options to Ansible rather than Ansible'
 
     ssh_args = -o ControlMaster=auto -o ControlPersist=60s
 
-In particular, users may wish to raise the ControlPersist time to encourage performance.  A value of 30 minutes may 
-be appropriate.  
+In particular, users may wish to raise the ControlPersist time to encourage performance.  A value of 30 minutes may
+be appropriate.
 
 .. _control_path:
 
@@ -529,9 +537,9 @@ This is the location to save ControlPath sockets. This defaults to::
 
    control_path=%(directory)s/ansible-ssh-%%h-%%p-%%r
 
-On some systems with very long hostnames or very long path names (caused by long user names or 
+On some systems with very long hostnames or very long path names (caused by long user names or
 deeply nested home directories) this can exceed the character limit on
-file socket names (108 characters for most platforms). In that case, you 
+file socket names (108 characters for most platforms). In that case, you
 may wish to shorten the string to something like the below::
 
    control_path = %(directory)s/%%h-%%r
@@ -553,12 +561,31 @@ cause scp to be used to transfer remote files instead::
 There's really no reason to change this unless problems are encountered, and then there's also no real drawback
 to managing the switch.  Most environments support SFTP by default and this doesn't usually need to be changed.
 
+
+.. _pipelining:
+
+pipelining
+==========
+
+Enabling pipelining reduces the number of SSH operations required to
+execute a module on the remote server, by executing many ansible modules without actual file transfer. 
+This can result in a very significant performance improvement when enabled, however when using "sudo:" operations you must
+first disable 'requiretty' in /etc/sudoers on all managed hosts.
+
+By default, this option is disabled to preserve compatibility with
+sudoers configurations that have requiretty (the default on many distros), but is highly
+recommended if you can enable it, eliminating the need for :doc:`playbooks_acceleration`::
+
+    pipelining=False
+
 .. _accelerate_settings:
 
 Accelerate Mode Settings
 ------------------------
 
-Under the [accelerate] header, the following settings are tunable for :doc:`playbooks_acceleration`
+Under the [accelerate] header, the following settings are tunable for :doc:`playbooks_acceleration`.  Acceleration is 
+a useful performance feature to use if you cannot enable :ref:`pipelining` in your environment, but is probably
+not needed if you can.
 
 .. _accelerate_port:
 
@@ -568,7 +595,7 @@ accelerate_port
 .. versionadded:: 1.3
 
 This is the port to use for accelerate mode::
-  
+
    accelerate_port = 5099
 
 .. _accelerate_timeout:

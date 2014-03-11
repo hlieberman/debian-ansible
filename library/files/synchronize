@@ -16,8 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
-import subprocess
-
 DOCUMENTATION = '''
 ---
 module: synchronize
@@ -34,9 +32,14 @@ options:
     description:
       - Path on the destination machine that will be synchronized from the source; The path can be absolute or relative.
     required: true
+  dest_port:
+    description:
+      - Port number for ssh on the destination host. The ansible_ssh_port inventory var takes precedence over this value.
+    default: 22
+    version_added: "1.5"
   mode:
     description:
-      - Specify the direction of the synchroniztion. In push mode the localhost or delgate is the  source; In pull mode the remote host in context is the source.
+      - Specify the direction of the synchroniztion. In push mode the localhost or delegate is the source; In pull mode the remote host in context is the source.
     required: false
     choices: [ 'push', 'pull' ]
     default: 'push'
@@ -46,6 +49,13 @@ options:
     choices: [ 'yes', 'no' ]
     default: 'yes'
     required: false
+  existing_only:
+    description:
+      - Skip creating new files on receiver.
+    choices: [ 'yes', 'no' ]
+    default: 'no'
+    required: false
+    version_added: "1.5"
   delete:
     description:
       - Delete files that don't exist (after transfer, not before) in the C(src) path.
@@ -69,6 +79,12 @@ options:
       - Copy symlinks as symlinks.
     choices: [ 'yes', 'no' ]
     default: the value of the archive option
+    required: false
+  copy_links:
+    description:
+      - Copy symlinks as the item that they point to (the referent) is copied, rather than the symlink.
+    choices: [ 'yes', 'no' ]
+    default: 'no'
     required: false
   perms:
     description:
@@ -109,6 +125,10 @@ notes:
    - The remote user for the dest path will always be the remote_user, not
      the sudo_user. 
    - Expect that dest=~/x will be ~<remote_user>/x even if using sudo.
+   - To exclude files and directories from being synchronized, you may add 
+     C(.rsync-filter) files to the source directory.
+     
+     
 author: Timothy Appnel
 '''
 
@@ -142,6 +162,11 @@ synchronize: src=some/relative/path dest=/some/absolute/path delete=yes
 
 # Synchronize using an alternate rsync command
 synchronize: src=some/relative/path dest=/some/absolute/path rsync_path="sudo rsync"
+
+# Example .rsync-filter file in the source directory
+- var       # exclude any path whose last part is 'var'
+- /var      # exclude any path starting with 'var' starting at the source directory
++ /var/conf # include /var/conf even though it was previously excluded
 '''
 
 
@@ -150,13 +175,16 @@ def main():
         argument_spec = dict(
             src = dict(required=True),
             dest = dict(required=True),
+            dest_port = dict(default=22),
             delete = dict(default='no', type='bool'),
             private_key = dict(default=None),
             rsync_path = dict(default=None),
             archive = dict(default='yes', type='bool'),
+            existing_only = dict(default='no', type='bool'),
             dirs  = dict(default='no', type='bool'),
             recursive = dict(type='bool'),
             links = dict(type='bool'),
+            copy_links = dict(type='bool'),
             perms = dict(type='bool'),
             times = dict(type='bool'),
             owner = dict(type='bool'),
@@ -168,32 +196,39 @@ def main():
 
     source = module.params['src']
     dest = module.params['dest']
+    dest_port = module.params['dest_port']
     delete = module.params['delete']
     private_key = module.params['private_key']
     rsync_path = module.params['rsync_path']
     rsync = module.params.get('local_rsync_path', 'rsync')
     rsync_timeout = module.params.get('rsync_timeout', 'rsync_timeout')
     archive = module.params['archive']
+    existing_only = module.params['existing_only']
     dirs = module.params['dirs']
     # the default of these params depends on the value of archive
     recursive = module.params['recursive']
     links = module.params['links']
+    copy_links = module.params['copy_links']
     perms = module.params['perms']
     times = module.params['times']
     owner = module.params['owner']
     group = module.params['group']
 
-    cmd = '%s --delay-updates --compress --timeout=%s' % (rsync, rsync_timeout)
+    cmd = '%s --delay-updates -FF --compress --timeout=%s' % (rsync, rsync_timeout)
     if module.check_mode:
         cmd = cmd + ' --dry-run'
     if delete:
         cmd = cmd + ' --delete-after'
+    if existing_only:
+        cmd = cmd + ' --existing'
     if archive:
         cmd = cmd + ' --archive'
         if recursive is False:
             cmd = cmd + ' --no-recursive'
         if links is False:
             cmd = cmd + ' --no-links'
+        if copy_links is True:
+            cmd = cmd + ' --copy-links'
         if perms is False:
             cmd = cmd + ' --no-perms'
         if times is False:
@@ -207,6 +242,8 @@ def main():
             cmd = cmd + ' --recursive'
         if links is True:
             cmd = cmd + ' --links'
+        if copy_links is True:
+            cmd = cmd + ' --copy-links'
         if perms is True:
             cmd = cmd + ' --perms'
         if times is True:
@@ -221,12 +258,25 @@ def main():
         private_key = ''
     else:
         private_key = '-i '+ private_key 
-    cmd = cmd + " --rsh '%s %s -o %s'" % ('ssh', private_key,
+
+    if dest_port != 22:
+        cmd += " --rsh '%s %s -o %s -o Port=%s'" % ('ssh', private_key,
+                'StrictHostKeyChecking=no', dest_port)
+    else:
+        cmd += " --rsh '%s %s -o %s'" % ('ssh', private_key,
                 'StrictHostKeyChecking=no')  # need ssh param
+
     if rsync_path:
         cmd = cmd + " --rsync-path '%s'" %(rsync_path)
     changed_marker = '<<CHANGED>>'
     cmd = cmd + " --out-format='" + changed_marker + "%i %n%L'"
+
+    # expand the paths
+    if '@' not in source:
+        source = os.path.expanduser(source) 
+    if '@' not in dest:
+        dest = os.path.expanduser(dest) 
+
     cmd = ' '.join([cmd, source, dest])
     cmdstr = cmd
     (rc, out, err) = module.run_command(cmd)
@@ -237,8 +287,8 @@ def main():
         return module.exit_json(changed=changed, msg=out.replace(changed_marker,''),
                                 rc=rc, cmd=cmdstr)
 
-# include magic from lib/ansible/module_common.py
-#<<INCLUDE_ANSIBLE_MODULE_COMMON>>
+# import module snippets
+from ansible.module_utils.basic import *
 
 main()
 

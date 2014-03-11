@@ -5,8 +5,7 @@ Here are some tips for making the most of Ansible playbooks.
 
 You can find some example playbooks illustrating these best practices in our `ansible-examples repository <https://github.com/ansible/ansible-examples>`_.  (NOTE: These may not use all of the features in the latest release, but are still an excellent reference!).
 
-.. contents::
-   :depth: 2
+.. contents:: Topics
 
 .. _content_organization:
 
@@ -306,6 +305,7 @@ This makes a dynamic group of hosts matching certain criteria, even if that grou
    # talk to all hosts just so we can learn about them 
 
    - hosts: all
+
      tasks:
         - group_by: key={{ ansible_distribution }}
 
@@ -313,6 +313,7 @@ This makes a dynamic group of hosts matching certain criteria, even if that grou
 
    - hosts: CentOS
      gather_facts: False
+
      tasks:
         - # tasks that only happen on CentOS go here
 
@@ -360,8 +361,8 @@ Keep It Simple
 
 When you can do something simply, do something simply.  Do not reach
 to use every feature of Ansible together, all at once.  Use what works
-for you.  For example, you will probably not need 'vars',
-'vars_files', 'vars_prompt' and '--extra-vars' all at once,
+for you.  For example, you will probably not need ``vars``,
+``vars_files``, ``vars_prompt`` and ``--extra-vars`` all at once,
 while also using an external inventory file.
 
 .. _version_control:
