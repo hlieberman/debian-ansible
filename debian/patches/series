@@ -1,5 +1,2 @@
-fix-shebang
 disable-google-analytics.patch
-remove-external-image.patch
-remove-external-footer-image.patch
-change-docsite-theme.patch
+text-documentation.patch
