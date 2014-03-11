@@ -3,8 +3,8 @@ Section: admin
 Priority: optional
 Maintainer: Janos Guljas <janos@debian.org>
 Uploaders: Michael Vogt <mvo@debian.org>
-Build-Depends: debhelper (>= 9), python-all, python-setuptools,
- python-sphinx, python-yaml, asciidoc
+Build-Depends: debhelper (>= 9), python-all, python-crypto, 
+ python-setuptools, python-sphinx, python-yaml, asciidoc
 Standards-Version: 3.9.4
 Homepage: http://ansible.com
 Vcs-Git: git://anonscm.debian.org/collab-maint/ansible.git
@@ -12,7 +12,7 @@ Vcs-Browser: http://anonscm.debian.org/gitweb/?p=collab-maint/ansible.git
 
 Package: ansible
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}, python-yaml, 
+Depends: ${misc:Depends}, ${python:Depends}, python-crypto, python-yaml, 
  openssh-client | python-paramiko, python-jinja2, python-httplib2
 Suggests: ansible-doc, sshpass
 Description: Configuration management, deployment, and task execution system
