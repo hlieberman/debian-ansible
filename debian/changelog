@@ -1,3 +1,13 @@
+ansible (1.5.2+dfsg-1) UNRELEASED; urgency=low
+
+  * New upstream version.
+  * Update Ansible homepage URL.
+  * Add FontAwesome to d/copyright, remove non-existant files.
+  * Refresh all patches, removing some related to documentation.
+  * Add new dependency on python-crypto.
+
+ -- Harlan Lieberman-Berg <H.LiebermanBerg@gmail.com>  Tue, 11 Mar 2014 12:26:33 -0400
+
 ansible (1.4.4+dfsg-2) UNRELASED; urgency=low
 
   * add "sshpass" to Suggests
