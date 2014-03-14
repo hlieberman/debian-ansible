@@ -1,40 +1,63 @@
+%define name ansible
+
 %if 0%{?rhel} == 5
 %define __python /usr/bin/python26
 %endif
 
-%if 0%{?rhel} && 0%{?rhel} <= 5
-%{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
+Name:      %{name}
+Version:   1.5.2
+Release:   1%{?dist}
+Url:       http://www.ansible.com
+Summary:   SSH-based application deployment, configuration management, and IT orchestration platform
+License:   GPLv3
+Group:     Development/Libraries
+Source:    http://releases.ansible.com/ansible/%{name}-%{version}.tar.gz
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-buildroot
-%endif
-
-Name: ansible
-Release: 1%{?dist}
-Summary: SSH-based configuration management, deployment, and orchestration engine
-Version: 1.4.4
-
-Group: Development/Libraries
-License: GPLv3
-Source0: http://www.ansibleworks.com/releases/%{name}-%{version}.tar.gz
-Url: http://www.ansibleworks.com
+%{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
 
 BuildArch: noarch
+
+# RHEL <=5
 %if 0%{?rhel} && 0%{?rhel} <= 5
 BuildRequires: python26-devel
-
 Requires: python26-PyYAML
 Requires: python26-paramiko
 Requires: python26-jinja2
 Requires: python26-keyczar
 Requires: python26-httplib2
-%else
-BuildRequires: python2-devel
+%endif
 
+# RHEL > 5
+%if 0%{?rhel} && 0%{?rhel} > 5
+BuildRequires: python2-devel
 Requires: PyYAML
 Requires: python-paramiko
 Requires: python-jinja2
 Requires: python-keyczar
 Requires: python-httplib2
 %endif
+
+# FEDORA > 17
+%if 0%{?fedora} >= 18
+BuildRequires: python-devel
+Requires: PyYAML
+Requires: python-paramiko
+Requires: python-jinja2
+Requires: python-keyczar
+Requires: python-httplib2
+%endif
+
+# SuSE/openSuSE
+%if 0%{?suse_version} 
+BuildRequires: python-devel
+BuildRequires: python-setuptools
+Requires: python-paramiko
+Requires: python-jinja2
+Requires: python-keyczar
+Requires: python-yaml
+Requires: python-httplib2
+%endif
+
 Requires: sshpass
 
 %description
@@ -52,18 +75,17 @@ are transferred to managed machines automatically.
 %{__python} setup.py build
 
 %install
-%{__python} setup.py install -O1 --root=$RPM_BUILD_ROOT
-mkdir -p $RPM_BUILD_ROOT/etc/ansible/
-cp examples/hosts $RPM_BUILD_ROOT/etc/ansible/
-cp examples/ansible.cfg $RPM_BUILD_ROOT/etc/ansible/
-mkdir -p $RPM_BUILD_ROOT/%{_mandir}/{man1,man3}/
-cp -v docs/man/man1/*.1 $RPM_BUILD_ROOT/%{_mandir}/man1/
-cp -v docs/man/man3/*.3 $RPM_BUILD_ROOT/%{_mandir}/man3/
-mkdir -p $RPM_BUILD_ROOT/%{_datadir}/ansible
-cp -rv library/* $RPM_BUILD_ROOT/%{_datadir}/ansible/
+%{__python} setup.py install -O1 --prefix=%{_prefix} --root=%{buildroot}
+mkdir -p %{buildroot}/etc/ansible/
+cp examples/hosts %{buildroot}/etc/ansible/
+cp examples/ansible.cfg %{buildroot}/etc/ansible/
+mkdir -p %{buildroot}/%{_mandir}/man1/
+cp -v docs/man/man1/*.1 %{buildroot}/%{_mandir}/man1/
+mkdir -p %{buildroot}/%{_datadir}/ansible
+cp -rv library/* %{buildroot}/%{_datadir}/ansible/
 
 %clean
-rm -rf $RPM_BUILD_ROOT
+rm -rf %{buildroot}
 
 %files
 %defattr(-,root,root)
@@ -75,11 +97,25 @@ rm -rf $RPM_BUILD_ROOT
 %config(noreplace) %{_sysconfdir}/ansible
 %doc README.md PKG-INFO COPYING
 %doc %{_mandir}/man1/ansible*
-%doc %{_mandir}/man3/ansible.*
 %doc examples/playbooks
 
 
 %changelog
+
+* Thu Mar 13 2014 Michael DeHaan <michael@ansible.com> - 1.5.3
+- Release 1.5.3
+
+* Tue Mar 11 2014 Michael DeHaan <michael@ansible.com> - 1.5.2
+- Release 1.5.2
+
+* Mon Mar 10 2014 Michael DeHaan <michael@ansible.com> - 1.5.1
+- Release 1.5.1
+
+* Fri Feb 28 2014 Michael DeHaan <michael@ansible.com> - 1.5.0
+- Release 1.5.0
+
+* Wed Feb 12 2014 Michael DeHaan <michael.dehaan@gmail.com> - 1.4.5
+* Release 1.4.5
 
 * Mon Jan 06 2014 Michael DeHaan <michael.dehaan@gmail.com> - 1.4.4
 * Release 1.4.4
@@ -90,7 +126,7 @@ rm -rf $RPM_BUILD_ROOT
 * Wed Dec 18 2013 Michael DeHaan <michael.dehaan@gmail.com> - 1.4.2
 * Release 1.4.2
 
-* Wed Nov 27 2013 Michael DeHaan <michael.dehaan@gmail.com> - 1.4.1
+* Wed Nov 27 2013 Michael DeHaan <michael.dehaan@gmail.com> - 1.4-1
 * Release 1.4.1
 
 * Thu Nov 21 2013 Michael DeHaan <michael.dehaan@gmail.com> - 1.4-0

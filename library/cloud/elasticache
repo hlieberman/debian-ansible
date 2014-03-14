@@ -17,9 +17,9 @@
 DOCUMENTATION = """
 ---
 module: elasticache
+short_description: Manage cache clusters in Amazon Elasticache.
 description:
   - Manage cache clusters in Amazon Elasticache.
-short_description: Manage cache clusters in Amazon Elasticache.
   - Returns information about the specified cache cluster.
 version_added: "1.4"
 requirements: [ "boto" ]
@@ -136,15 +136,6 @@ EXAMPLES = """
 import sys
 import os
 import time
-
-AWS_REGIONS = ['ap-northeast-1',
-               'ap-southeast-1',
-               'ap-southeast-2',
-               'eu-west-1',
-               'sa-east-1',
-               'us-east-1',
-               'us-west-1',
-               'us-west-2']
 
 try:
     import boto
@@ -467,8 +458,8 @@ class ElastiCacheManager(object):
 
 
 def main():
-    module = AnsibleModule(
-        argument_spec=dict(
+    argument_spec = ec2_argument_spec()
+    argument_spec.update(dict(
             state={'required': True, 'choices': ['present', 'absent', 'rebooted']},
             name={'required': True},
             engine={'required': False, 'default': 'memcached'},
@@ -479,17 +470,13 @@ def main():
             cache_security_groups={'required': False, 'default': ['default'],
                                    'type': 'list'},
             zone={'required': False, 'default': None},
-            ec2_secret_key={'default': None,
-                            'aliases': ['aws_secret_key', 'secret_key'],
-                            'no_log': True},
-            ec2_access_key={'default': None,
-                            'aliases': ['aws_access_key', 'access_key']},
-            region={'default': None, 'required': False,
-                    'aliases': ['aws_region', 'ec2_region'],
-                    'choices': AWS_REGIONS},
             wait={'required': False, 'choices': BOOLEANS, 'default': True},
             hard_modify={'required': False, 'choices': BOOLEANS, 'default': False}
         )
+    )
+
+    module = AnsibleModule(
+        argument_spec=argument_spec,
     )
 
     ec2_url, aws_access_key, aws_secret_key, region = get_ec2_creds(module)

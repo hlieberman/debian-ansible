@@ -83,7 +83,7 @@ options:
 
 requirements: [ "boto 2.9+" ]
 
-author: benno@ansibleworks.com Note. Most of the code has been taken from the S3 module.
+author: benno@ansible.com Note. Most of the code has been taken from the S3 module.
 
 '''
 
@@ -413,7 +413,7 @@ def main():
             module.fail_json(msg="Bucket and Object parameters must be set", failed=True)
 
 
-# this is magic, see lib/ansible/module_common.py
-#<<INCLUDE_ANSIBLE_MODULE_COMMON>>
+# import module snippets
+from ansible.module_utils.basic import *
 
 main()

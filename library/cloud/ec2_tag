@@ -31,8 +31,9 @@ options:
   state:
     description:
       - Whether the tags should be present or absent on the resource.
-    required: true
-    default: null
+    required: false
+    default: present
+    choices: ['present', 'absent']
     aliases: []
   region:
     description:
@@ -58,6 +59,15 @@ options:
     required: false
     default: null
     aliases: []
+  validate_certs:
+    description:
+      - When set to "no", SSL certificates will not be validated for boto versions >= 2.6.0.
+    required: false
+    default: "yes"
+    choices: ["yes", "no"]
+    aliases: []
+    version_added: "1.5"
+
 requirements: [ "boto" ]
 author: Lester Wade
 '''
@@ -101,50 +111,21 @@ except ImportError:
     print "failed=True msg='boto required for this module'"
     sys.exit(1)
 
-AWS_REGIONS = ['ap-northeast-1',
-               'ap-southeast-1',
-               'ap-southeast-2',
-               'eu-west-1',
-               'sa-east-1',
-               'us-east-1',
-               'us-west-1',
-               'us-west-2']
-
 def main():
-    module = AnsibleModule(
-        argument_spec = dict(
+    argument_spec = ec2_argument_spec()
+    argument_spec.update(dict(
             resource = dict(required=True),
             tags = dict(required=True),
-            region = dict(aliases=['aws_region', 'ec2_region'], choices=AWS_REGIONS),
-            state = dict(choices=['present', 'absent']),
-            ec2_url = dict(aliases=['EC2_URL']),
-            ec2_secret_key = dict(aliases=['aws_secret_key', 'secret_key'], no_log=True),
-            ec2_access_key = dict(aliases=['aws_access_key', 'access_key']),
+            state = dict(default='present', choices=['present', 'absent']),
         )
     )
-
-    # def get_ec2_creds(module):
-    #   return ec2_url, ec2_access_key, ec2_secret_key, region
-    ec2_url, aws_access_key, aws_secret_key, region = get_ec2_creds(module)
+    module = AnsibleModule(argument_spec=argument_spec)
 
     resource = module.params.get('resource')
     tags = module.params['tags']
     state = module.params.get('state')
   
-    # If we have a region specified, connect to its endpoint.
-    if region: 
-        try:
-            ec2 = boto.ec2.connect_to_region(region, aws_access_key_id=aws_access_key, aws_secret_access_key=aws_secret_key)
-        except boto.exception.NoAuthHandlerFound, e:
-            module.fail_json(msg = str(e))
-    # Otherwise, no region so we fallback to the old connection method
-    elif ec2_url:
-        try:
-            ec2 = boto.connect_ec2_endpoint(ec2_url, aws_access_key, aws_secret_key)
-        except boto.exception.NoAuthHandlerFound, e:
-            module.fail_json(msg = str(e))
-    else:
-        module.fail_json(msg="Either region or ec2_url must be specified")
+    ec2 = ec2_connect(module)
     
     # We need a comparison here so that we can accurately report back changed status.
     # Need to expand the gettags return format and compare with "tags" and then tag or detag as appropriate.

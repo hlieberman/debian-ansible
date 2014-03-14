@@ -264,7 +264,7 @@ class Zfs(object):
             cmd.append('-b %s' % volblocksize)
         if properties:
             for prop, value in properties.iteritems():
-                cmd.append('-o %s=%s' % (prop, value))
+                cmd.append('-o %s="%s"' % (prop, value))
         if volsize:
             cmd.append('-V')
             cmd.append(volsize)
@@ -407,6 +407,6 @@ def main():
     result['changed'] = zfs.changed
     module.exit_json(**result)
 
-# include magic from lib/ansible/module_common.py
-#<<INCLUDE_ANSIBLE_MODULE_COMMON>>
+# import module snippets
+from ansible.module_utils.basic import *
 main()

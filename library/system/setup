@@ -29,7 +29,6 @@ import socket
 import struct
 import datetime
 import getpass
-import subprocess
 import ConfigParser
 import StringIO
 
@@ -51,7 +50,7 @@ options:
         description:
             - path used for local ansible facts (*.fact) - files in this dir
               will be run (if executable) and their results be added to ansible_local facts
-              if a file is not executable it is read. 
+              if a file is not executable it is read.
               File/results format can be json or ini-format
         required: false
         default: '/etc/ansible/facts.d'
@@ -83,7 +82,7 @@ ansible all -m setup -a 'filter=ansible_*_mb'
 # Display only facts returned by facter.
 ansible all -m setup -a 'filter=facter_*'
 
-# Display only facts returned by facter.
+# Display only facts about certain interfaces.
 ansible all -m setup -a 'filter=ansible_eth[0-2]'
 """
 
@@ -117,7 +116,9 @@ class Facts(object):
                     '/etc/system-release': 'OtherLinux',
                     '/etc/alpine-release': 'Alpine',
                     '/etc/release': 'Solaris',
-                    '/etc/arch-release': 'Archlinux' }
+                    '/etc/arch-release': 'Archlinux',
+                    '/etc/SuSE-release': 'SuSE',
+                    '/etc/os-release': 'Debian' }
     SELINUX_MODE_DICT = { 1: 'enforcing', 0: 'permissive', -1: 'disabled' }
 
     # A list of dicts.  If there is a platform with more than one
@@ -192,7 +193,7 @@ class Facts(object):
         fact_path = module.params.get('fact_path', None)
         if not fact_path or not os.path.exists(fact_path):
             return
-            
+
         local = {}
         for fn in sorted(glob.glob(fact_path + '/*.fact')):
             # where it will sit under local facts
@@ -205,7 +206,7 @@ class Facts(object):
                 rc, out, err = module.run_command(fn)
             else:
                 out = open(fn).read()
-            
+
             # load raw json
             fact = 'loading %s' % fact_base
             try:
@@ -231,7 +232,7 @@ class Facts(object):
         if not local:
             return
         self.facts['local'] = local
-            
+
     # platform.dist() is deprecated in 2.6
     # in 2.6 and newer, you should use platform.linux_distribution()
     def get_distribution_facts(self):
@@ -324,6 +325,14 @@ class Facts(object):
                         self.facts['distribution'] = data.split()[0]
                         self.facts['distribution_version'] = data.split()[1]
                         self.facts['distribution_release'] = ora_prefix + data
+                    elif name == 'SuSE':
+                        data = get_file_content(path).splitlines()
+                        self.facts['distribution_release'] = data[2].split('=')[1].strip()
+                    elif name == 'Debian':
+                        data = get_file_content(path).split('\n')[0]
+                        release = re.search("PRETTY_NAME.+ \(?([^ ]+?)\)?\"", data)
+                        if release:
+                            self.facts['distribution_release'] = release.groups()[0]
                     else:
                         self.facts['distribution'] = name
 
@@ -377,27 +386,48 @@ class Facts(object):
 
     def get_lsb_facts(self):
         lsb_path = module.get_bin_path('lsb_release')
-        if lsb_path is None:
-            return self.facts
-        rc, out, err = module.run_command([lsb_path, "-a"])
-        if rc == 0:
+        if lsb_path:
+            rc, out, err = module.run_command([lsb_path, "-a"])
+            if rc == 0:
+                self.facts['lsb'] = {}
+            for line in out.split('\n'):
+                if len(line) < 1:
+                    continue
+                value = line.split(':', 1)[1].strip()
+                if 'LSB Version:' in line:
+                    self.facts['lsb']['release'] = value
+                elif 'Distributor ID:' in line:
+                    self.facts['lsb']['id'] = value
+                elif 'Description:' in line:
+                    self.facts['lsb']['description'] = value
+                elif 'Release:' in line:
+                    self.facts['lsb']['release'] = value
+                elif 'Codename:' in line:
+                    self.facts['lsb']['codename'] = value
+            if 'lsb' in self.facts and 'release' in self.facts['lsb']:
+                self.facts['lsb']['major_release'] = self.facts['lsb']['release'].split('.')[0]
+        elif lsb_path is None and os.path.exists('/etc/lsb-release'):
             self.facts['lsb'] = {}
-        for line in out.split('\n'):
-            if len(line) < 1:
-                continue
-            value = line.split(':', 1)[1].strip()
-            if 'LSB Version:' in line:
-                self.facts['lsb']['release'] = value
-            elif 'Distributor ID:' in line:
-                self.facts['lsb']['id'] = value
-            elif 'Description:' in line:
-                self.facts['lsb']['description'] = value
-            elif 'Release:' in line:
-                self.facts['lsb']['release'] = value
-            elif 'Codename:' in line:
-                self.facts['lsb']['codename'] = value
+            f = open('/etc/lsb-release', 'r')
+            try:
+                for line in f.readlines():
+                    value = line.split('=',1)[1].strip()
+                    if 'DISTRIB_ID' in line:
+                        self.facts['lsb']['id'] = value
+                    elif 'DISTRIB_RELEASE' in line:
+                        self.facts['lsb']['release'] = value
+                    elif 'DISTRIB_DESCRIPTION' in line:
+                        self.facts['lsb']['description'] = value
+                    elif 'DISTRIB_CODENAME' in line:
+                        self.facts['lsb']['codename'] = value
+            finally:
+                f.close()
+        else:
+            return self.facts
+
         if 'lsb' in self.facts and 'release' in self.facts['lsb']:
             self.facts['lsb']['major_release'] = self.facts['lsb']['release'].split('.')[0]
+
 
     def get_selinux_facts(self):
         if not HAVE_SELINUX:
@@ -939,6 +969,7 @@ class FreeBSDHardware(Hardware):
     def populate(self):
         self.get_cpu_facts()
         self.get_memory_facts()
+        self.get_dmi_facts()
         self.get_device_facts()
         self.get_mount_facts()
         return self.facts
@@ -1007,6 +1038,39 @@ class FreeBSDHardware(Hardware):
                 s = slices.match(device)
                 if s:
                     self.facts['devices'][d.group(1)].append(s.group(1))
+
+    def get_dmi_facts(self):
+        ''' learn dmi facts from system
+
+        Use dmidecode executable if available'''
+
+        # Fall back to using dmidecode, if available
+        dmi_bin = module.get_bin_path('dmidecode')
+        DMI_DICT = dict(
+            bios_date='bios-release-date',
+            bios_version='bios-version',
+            form_factor='chassis-type',
+            product_name='system-product-name',
+            product_serial='system-serial-number',
+            product_uuid='system-uuid',
+            product_version='system-version',
+            system_vendor='system-manufacturer'
+        )
+        for (k, v) in DMI_DICT.items():
+            if dmi_bin is not None:
+                (rc, out, err) = module.run_command('%s -s %s' % (dmi_bin, v))
+                if rc == 0:
+                    # Strip out commented lines (specific dmidecode output)
+                    self.facts[k] = ''.join([ line for line in out.split('\n') if not line.startswith('#') ])
+                    try:
+                        json.dumps(self.facts[k])
+                    except UnicodeDecodeError:
+                        self.facts[k] = 'NA'
+                else:
+                    self.facts[k] = 'NA'
+            else:
+                self.facts[k] = 'NA'
+
 
 class NetBSDHardware(Hardware):
     """
@@ -1294,14 +1358,30 @@ class Darwin(Hardware):
                 sysctl[key] = value.strip()
         return sysctl
 
+    def get_system_profile(self):
+        rc, out, err = module.run_command(["/usr/sbin/system_profiler", "SPHardwareDataType"])
+        if rc != 0:
+            return dict()
+        system_profile = dict()
+        for line in out.splitlines():
+            if ': ' in line:
+                (key, value) = line.split(': ', 1)
+                system_profile[key.strip()] = ' '.join(value.strip().split())
+        return system_profile
+
     def get_mac_facts(self):
         self.facts['model'] = self.sysctl['hw.model']
         self.facts['osversion'] = self.sysctl['kern.osversion']
         self.facts['osrevision'] = self.sysctl['kern.osrevision']
 
     def get_cpu_facts(self):
-        self.facts['processor'] = self.sysctl['machdep.cpu.brand_string']
-        self.facts['processor_cores'] = self.sysctl['machdep.cpu.core_count']
+        if 'machdep.cpu.brand_string' in self.sysctl: # Intel
+            self.facts['processor'] = self.sysctl['machdep.cpu.brand_string']
+            self.facts['processor_cores'] = self.sysctl['machdep.cpu.core_count']
+        else: # PowerPC
+            system_profile = self.get_system_profile()
+            self.facts['processor'] = '%s @ %s' % (system_profile['Processor Name'], system_profile['Processor Speed'])
+            self.facts['processor_cores'] = self.sysctl['hw.physicalcpu']
 
     def get_memory_facts(self):
         self.facts['memtotal_mb'] = long(self.sysctl['hw.memsize']) / 1024 / 1024
@@ -1333,7 +1413,8 @@ class Network(Facts):
                 subclass = sc
         return super(cls, subclass).__new__(subclass, *arguments, **keyword)
 
-    def __init__(self):
+    def __init__(self, module):
+        self.module = module
         Facts.__init__(self)
 
     def populate(self):
@@ -1349,11 +1430,11 @@ class LinuxNetwork(Network):
     """
     platform = 'Linux'
 
-    def __init__(self):
-        Network.__init__(self)
+    def __init__(self, module):
+        Network.__init__(self, module)
 
     def populate(self):
-        ip_path = module.get_bin_path('ip')
+        ip_path = self.module.get_bin_path('ip')
         if ip_path is None:
             return self.facts
         default_ipv4, default_ipv6 = self.get_default_interfaces(ip_path)
@@ -1481,19 +1562,29 @@ class LinuxNetwork(Network):
                         iface = words[-1]
                         if iface != device:
                             interfaces[iface] = {}
-                            interfaces[iface].update(interfaces[device])
-                        if "ipv4_secondaries" not in interfaces[iface]:
-                            interfaces[iface]["ipv4_secondaries"] = []
                         if not secondary or "ipv4" not in interfaces[iface]:
                             interfaces[iface]['ipv4'] = {'address': address,
                                                          'netmask': netmask,
                                                          'network': network}
                         else:
+                            if "ipv4_secondaries" not in interfaces[iface]:
+                                interfaces[iface]["ipv4_secondaries"] = []
                             interfaces[iface]["ipv4_secondaries"].append({
                                 'address': address,
                                 'netmask': netmask,
                                 'network': network,
                             })
+
+                        # add this secondary IP to the main device
+                        if secondary:
+                            if "ipv4_secondaries" not in interfaces[device]:
+                                interfaces[device]["ipv4_secondaries"] = []
+                            interfaces[device]["ipv4_secondaries"].append({
+                                'address': address,
+                                'netmask': netmask,
+                                'network': network,
+                            })
+
                         # If this is the default address, update default_ipv4
                         if 'address' in default_ipv4 and default_ipv4['address'] == address:
                             default_ipv4['netmask'] = netmask
@@ -1525,16 +1616,19 @@ class LinuxNetwork(Network):
                             ips['all_ipv6_addresses'].append(address)
 
             ip_path = module.get_bin_path("ip")
-            primary_data = subprocess.Popen(
-                [ip_path, 'addr', 'show', 'primary', device], 
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()[0]
-            secondary_data = subprocess.Popen(
-                [ip_path, 'addr', 'show', 'secondary', device], 
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()[0]
+
+            args = [ip_path, 'addr', 'show', 'primary', device]
+            rc, stdout, stderr = self.module.run_command(args)
+            primary_data = stdout
+
+            args = [ip_path, 'addr', 'show', 'secondary', device]
+            rc, stdout, stderr = self.module.run_command(args)
+            secondary_data = stdout
+
             parse_ip_output(primary_data)
             parse_ip_output(secondary_data, secondary=True)
 
-        # replace : by _ in interface name since they are hard to use in template 
+        # replace : by _ in interface name since they are hard to use in template
         new_interfaces = {}
         for i in interfaces:
             if ':' in i:
@@ -1556,8 +1650,8 @@ class GenericBsdIfconfigNetwork(Network):
     """
     platform = 'Generic_BSD_Ifconfig'
 
-    def __init__(self):
-        Network.__init__(self)
+    def __init__(self, module):
+        Network.__init__(self, module)
 
     def populate(self):
 
@@ -1785,6 +1879,61 @@ class FreeBSDNetwork(GenericBsdIfconfigNetwork, Network):
     """
     platform = 'FreeBSD'
 
+class AIXNetwork(GenericBsdIfconfigNetwork, Network):
+    """
+    This is the AIX Network Class.
+    It uses the GenericBsdIfconfigNetwork unchanged.
+    """
+    platform = 'AIX'
+
+    # AIX 'ifconfig -a' does not have three words in the interface line
+    def get_interfaces_info(self, ifconfig_path):
+        interfaces = {}
+        current_if = {}
+        ips = dict(
+            all_ipv4_addresses = [],
+            all_ipv6_addresses = [],
+        )
+        rc, out, err = module.run_command([ifconfig_path, '-a'])
+
+        for line in out.split('\n'):
+
+            if line:
+                words = line.split()
+
+		# only this condition differs from GenericBsdIfconfigNetwork
+                if re.match('^\w*\d*:', line):
+                    current_if = self.parse_interface_line(words)
+                    interfaces[ current_if['device'] ] = current_if
+                elif words[0].startswith('options='):
+                    self.parse_options_line(words, current_if, ips)
+                elif words[0] == 'nd6':
+                    self.parse_nd6_line(words, current_if, ips)
+                elif words[0] == 'ether':
+                    self.parse_ether_line(words, current_if, ips)
+                elif words[0] == 'media:':
+                    self.parse_media_line(words, current_if, ips)
+                elif words[0] == 'status:':
+                    self.parse_status_line(words, current_if, ips)
+                elif words[0] == 'lladdr':
+                    self.parse_lladdr_line(words, current_if, ips)
+                elif words[0] == 'inet':
+                    self.parse_inet_line(words, current_if, ips)
+                elif words[0] == 'inet6':
+                    self.parse_inet6_line(words, current_if, ips)
+                else:
+                    self.parse_unknown_line(words, current_if, ips)
+
+        return interfaces, ips
+
+    # AIX 'ifconfig -a' does not inform about MTU, so remove current_if['mtu'] here
+    def parse_interface_line(self, words):
+        device = words[0][0:-1]
+        current_if = {'device': device, 'ipv4': [], 'ipv6': [], 'type': 'unknown'}
+        current_if['flags'] = self.get_options(words[1])
+        current_if['macaddress'] = 'unknown'    # will be overwritten later
+        return current_if
+
 class OpenBSDNetwork(GenericBsdIfconfigNetwork, Network):
     """
     This is the OpenBSD Network Class.
@@ -1955,6 +2104,11 @@ class LinuxVirtual(Virtual):
 
         if product_name in ['KVM', 'Bochs']:
             self.facts['virtualization_type'] = 'kvm'
+            self.facts['virtualization_role'] = 'guest'
+            return
+
+        if product_name == 'RHEV Hypervisor':
+            self.facts['virtualization_type'] = 'RHEV'
             self.facts['virtualization_role'] = 'guest'
             return
 
@@ -2130,11 +2284,11 @@ def get_file_content(path, default=None):
             data = default
     return data
 
-def ansible_facts():
+def ansible_facts(module):
     facts = {}
     facts.update(Facts().populate())
     facts.update(Hardware().populate())
-    facts.update(Network().populate())
+    facts.update(Network(module).populate())
     facts.update(Virtual().populate())
     return facts
 
@@ -2143,7 +2297,7 @@ def ansible_facts():
 def run_setup(module):
 
     setup_options = {}
-    facts = ansible_facts()
+    facts = ansible_facts(module)
 
     for (k, v) in facts.items():
         setup_options["ansible_%s" % k.replace('-', '_')] = v
@@ -2205,6 +2359,6 @@ def main():
     data = run_setup(module)
     module.exit_json(**data)
 
-# this is magic, see lib/ansible/module_common.py
-#<<INCLUDE_ANSIBLE_MODULE_COMMON>>
+# import module snippets
+from ansible.module_utils.basic import *
 main()

@@ -41,7 +41,7 @@ options:
     choices: [ "status", "cleanup" ]
     default: "status"
 notes:
-    - See also U(http://www.ansibleworks.com/docs/playbooks_async.html#asynchronous-actions-and-polling)
+    - See also U(http://docs.ansible.com/playbooks_async.html)
 requirements: []
 author: Michael DeHaan
 '''
@@ -94,6 +94,6 @@ def main():
 
     module.exit_json(**data)
 
-# this is magic, see lib/ansible/module_common.py
-#<<INCLUDE_ANSIBLE_MODULE_COMMON>>
+# import module snippets
+from ansible.module_utils.basic import *
 main()

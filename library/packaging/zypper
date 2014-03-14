@@ -196,13 +196,6 @@ def main():
     result['name'] = name
     result['state'] = state
 
-    # Decide if the name contains a version number.
-    match = re.search("-[0-9]", name)
-    if match:
-        specific_version = True
-    else:
-        specific_version = False
-
     # Get package state
     installed_state = get_package_state(module, name)
 
@@ -224,6 +217,6 @@ def main():
 
     module.exit_json(**result)
 
-# this is magic, see lib/ansible/module_common.py
-#<<INCLUDE_ANSIBLE_MODULE_COMMON>>
+# import module snippets
+from ansible.module_utils.basic import *
 main()

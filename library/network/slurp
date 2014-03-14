@@ -68,8 +68,8 @@ def main():
 
     module.exit_json(content=data, encoding='base64')
 
-# this is magic, see lib/ansible/module_common.py
-#<<INCLUDE_ANSIBLE_MODULE_COMMON>>
+# import module snippets
+from ansible.module_utils.basic import *
 
 main()
 
