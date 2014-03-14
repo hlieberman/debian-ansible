@@ -48,7 +48,7 @@ options:
     version_added: "1.2"
   manage_dir:
     description:
-      - Whether this module should manage the directory of the authorized_keys file
+      - Whether this module should manage the directory of the authorized_keys file. Make sure to set C(manage_dir=no) if you are using an alternate directory for authorized_keys set with C(path), since you could lock yourself out of SSH access. See the example below.
     required: false
     choices: [ "yes", "no" ]
     default: "yes"
@@ -111,7 +111,29 @@ import os
 import pwd
 import os.path
 import tempfile
+import re
 import shlex
+
+class keydict(dict):
+
+    """ a dictionary that maintains the order of keys as they are added """
+    
+    # http://stackoverflow.com/questions/2328235/pythonextend-the-dict-class
+
+    def __init__(self, *args, **kw):
+        super(keydict,self).__init__(*args, **kw)
+        self.itemlist = super(keydict,self).keys()
+    def __setitem__(self, key, value):
+        self.itemlist.append(key)
+        super(keydict,self).__setitem__(key, value)        
+    def __iter__(self):
+        return iter(self.itemlist)
+    def keys(self):
+        return self.itemlist
+    def values(self):
+        return [self[key] for key in self]
+    def itervalues(self):
+        return (self[key] for key in self)    
 
 def keyfile(module, user, write=False, path=None, manage_dir=True):
     """
@@ -170,39 +192,51 @@ def keyfile(module, user, write=False, path=None, manage_dir=True):
 
     return keysfile
 
-def parseoptions(options):
+def parseoptions(module, options):
     ''' 
     reads a string containing ssh-key options 
     and returns a dictionary of those options
     '''
-    options_dict = {}
+    options_dict = keydict() #ordered dict
     if options:
-        lex = shlex.shlex(options)
-        lex.quotes = ["'", '"']
-        lex.whitespace_split = True
-        opt_parts = list(lex)
+        token_exp = [
+            # matches separator
+            (r',+', False),
+            # matches option with value, e.g. from="x,y"
+            (r'([a-z0-9-]+)="((?:[^"\\]|\\.)*)"', True),
+            # matches single option, e.g. no-agent-forwarding 
+            (r'[a-z0-9-]+', True)
+        ]
 
-        #options_list = options.strip().split(",")
-        options_list = opt_parts
-        for option in options_list:
-            # happen when there is comma at the end
-            if option == '':
-                continue
-            if option.find("=") != -1:
-                (arg,val) = option.split("=", 1)
+        pos = 0
+        while pos < len(options):
+            match = None
+            for pattern, is_valid_option in token_exp:
+                regex = re.compile(pattern, re.IGNORECASE)
+                match = regex.match(options, pos)
+                if match:
+                    text = match.group(0)
+                    if is_valid_option:
+                        if len(match.groups()) == 2:
+                            options_dict[match.group(1)] = match.group(2)
+                        else:
+                            options_dict[text] = None
+                    break
+            if not match:
+                module.fail_json(msg="invalid option string: %s" % options)
             else:
-                arg = option
-                val = None
-            options_dict[arg] = val.replace('"', '').replace("'", "")
+                pos = match.end(0)
+
     return options_dict
 
-def parsekey(raw_key):
+def parsekey(module, raw_key):
     '''
     parses a key, which may or may not contain a list
     of ssh-key options at the beginning
     '''
 
     VALID_SSH2_KEY_TYPES = [
+        'ssh-ed25519',
         'ecdsa-sha2-nistp256',
         'ecdsa-sha2-nistp384',
         'ecdsa-sha2-nistp521', 
@@ -234,12 +268,11 @@ def parsekey(raw_key):
     # check for options
     if type_index is None:
         return None
-    elif type_index == 1:
-        # parse the options and store them
-        options = key_parts[0]
+    elif type_index > 0:
+        options = " ".join(key_parts[:type_index])
 
     # parse the options (if any)
-    options = parseoptions(options)
+    options = parseoptions(module, options)
 
     # get key after the type index
     key = key_parts[(type_index + 1)]
@@ -250,7 +283,7 @@ def parsekey(raw_key):
 
     return (key, key_type, options, comment)
 
-def readkeys(filename):
+def readkeys(module, filename):
 
     if not os.path.isfile(filename):
         return {}
@@ -258,7 +291,7 @@ def readkeys(filename):
     keys = {}
     f = open(filename)
     for line in f.readlines():
-        key_data = parsekey(line)
+        key_data = parsekey(module, line)
         if key_data:
             # use key as identifier
             keys[key_data[0]] = key_data
@@ -280,7 +313,7 @@ def writekeys(module, filename, keys):
                 option_str = ""
                 if options:
                     option_strings = []
-                    for option_key in sorted(options.keys()):
+                    for option_key in options.keys():
                         if options[option_key]:
                             option_strings.append("%s=\"%s\"" % (option_key, options[option_key]))
                         else:
@@ -309,19 +342,22 @@ def enforce_state(module, params):
     state       = params.get("state", "present")
     key_options = params.get("key_options", None)
 
-    key = key.split('\n')
+    # extract indivial keys into an array, skipping blank lines and comments
+    key = [s for s in key.splitlines() if s and not s.startswith('#')]
+
 
     # check current state -- just get the filename, don't create file
     do_write = False
     params["keyfile"] = keyfile(module, user, do_write, path, manage_dir)
-    existing_keys = readkeys(params["keyfile"])
+    existing_keys = readkeys(module, params["keyfile"])
 
     # Check our new keys, if any of them exist we'll continue.
     for new_key in key:
+        parsed_new_key = parsekey(module, new_key)
         if key_options is not None:
-            new_key = "%s %s" % (key_options, new_key)
+            parsed_options = parseoptions(module, key_options)
+            parsed_new_key = (parsed_new_key[0], parsed_new_key[1], parsed_options, parsed_new_key[3])
 
-        parsed_new_key = parsekey(new_key)
         if not parsed_new_key:
             module.fail_json(msg="invalid key specified: %s" % new_key)
 
@@ -383,6 +419,6 @@ def main():
     results = enforce_state(module, module.params)
     module.exit_json(**results)
 
-# this is magic, see lib/ansible/module_common.py
-#<<INCLUDE_ANSIBLE_MODULE_COMMON>>
+# import module snippets
+from ansible.module_utils.basic import *
 main()

@@ -71,7 +71,7 @@ def query_package(module, brew_path, name, state="present"):
     """ Returns whether a package is installed or not. """
 
     if state == "present":
-        rc, out, err = module.run_command("%s list -m1 | grep -q '^%s$'" % (brew_path, name))
+        rc, out, err = module.run_command("%s list %s" % (brew_path, name))
         if rc == 0:
             return True
 
@@ -170,7 +170,7 @@ def main():
     elif p["state"] in ["absent", "removed"]:
         remove_packages(module, brew_path, pkgs)
 
-# this is magic, see lib/ansible/module_common.py
-#<<INCLUDE_ANSIBLE_MODULE_COMMON>>
+# import module snippets
+from ansible.module_utils.basic import *
 
 main()

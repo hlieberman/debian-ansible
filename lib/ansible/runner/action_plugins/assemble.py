@@ -1,4 +1,4 @@
-# (c) 2013, Michael DeHaan <michael.dehaan@gmail.com>
+# (c) 2013-2014, Michael DeHaan <michael.dehaan@gmail.com>
 #           Stephen Fromm <sfromm@gmail.com>
 #           Brian Coca  <briancoca+dev@gmail.com>
 #
@@ -22,13 +22,16 @@ import pipes
 import shutil
 import tempfile
 from ansible import utils
+from ansible.runner.return_data import ReturnData
 
 class ActionModule(object):
+
+    TRANSFERS_FILES = True
 
     def __init__(self, runner):
         self.runner = runner
 
-    def _assemble_from_fragments(src_path, delimiter=None):
+    def _assemble_from_fragments(self, src_path, delimiter=None):
         ''' assemble a file from a directory of fragments '''
         tmpfd, temp_path = tempfile.mkstemp()
         tmp = os.fdopen(tmpfd,'w')
@@ -36,7 +39,13 @@ class ActionModule(object):
         for f in sorted(os.listdir(src_path)):
             fragment = "%s/%s" % (src_path, f)
             if delimit_me and delimiter:
+                # en-escape things like new-lines
+                delimiter = delimiter.decode('unicode-escape')
                 tmp.write(delimiter)
+                # always make sure there's a newline after the
+                # delimiter, so lines don't run together
+                if delimiter[-1] != '\n':
+                    tmp.write('\n')
             if os.path.isfile(fragment):
                 tmp.write(file(fragment).read())
             delimit_me = True
@@ -54,7 +63,7 @@ class ActionModule(object):
         src = options.get('src', None)
         dest = options.get('dest', None)
         delimiter = options.get('delimiter', None)
-        remote_src = options.get('remote_src', True)
+        remote_src = utils.boolean(options.get('remote_src', 'yes'))
 
         if src is None or dest is None:
             result = dict(failed=True, msg="src and dest are required")
@@ -62,14 +71,20 @@ class ActionModule(object):
 
         if remote_src:
             return self.runner._execute_module(conn, tmp, 'assemble', module_args, inject=inject, complex_args=complex_args)
+        elif '_original_file' in inject:
+            src = utils.path_dwim_relative(inject['_original_file'], 'files', src, self.runner.basedir)
+        else:
+            # the source is local, so expand it here
+            src = os.path.expanduser(src)
 
         # Does all work assembling the file
-        path = _assemble_from_fragments(src, delimiter)
+        path = self._assemble_from_fragments(src, delimiter)
 
         pathmd5 = utils.md5s(path)
         remote_md5 = self.runner._remote_md5(conn, tmp, dest)
 
         if pathmd5 != remote_md5:
+            resultant = file(path).read()
             if self.runner.diff:
                 dest_result = self.runner._execute_module(conn, tmp, 'slurp', "path=%s" % dest, inject=inject, persist_files=True)
                 if 'content' in dest_result.result:
@@ -88,10 +103,11 @@ class ActionModule(object):
             module_args = "%s src=%s dest=%s original_basename=%s" % (module_args, pipes.quote(xfered), pipes.quote(dest), pipes.quote(os.path.basename(src)))
 
             if self.runner.noop_on_check(inject):
-                return ReturnData(conn=conn, comm_ok=True, result=dict(changed=True), diff=dict(before_header=dest, after_header=src, before=dest_contents, after=resultant))
+                return ReturnData(conn=conn, comm_ok=True, result=dict(changed=True), diff=dict(before_header=dest, after_header=src, after=resultant))
             else:
-                res = self.runner._execute_module(conn, tmp, 'copy', module_args, inject=inject, complex_args=complex_args)
-                res.diff = dict(before=dest_contents, after=resultant)
+                res = self.runner._execute_module(conn, tmp, 'copy', module_args, inject=inject)
+                res.diff = dict(after=resultant)
                 return res
         else:
-            return self.runner._execute_module(conn, tmp, 'file', module_args, inject=inject, complex_args=complex_args)
+            module_args = "%s src=%s dest=%s original_basename=%s" % (module_args, pipes.quote(xfered), pipes.quote(dest), pipes.quote(os.path.basename(src)))
+            return self.runner._execute_module(conn, tmp, 'file', module_args, inject=inject)

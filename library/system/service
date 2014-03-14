@@ -207,7 +207,9 @@ class Service(object):
                 os._exit(0)
 
             # Start the command
-            p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=lambda: os.close(pipe[1]))
+            if isinstance(cmd, basestring):
+                cmd = shlex.split(cmd)
+            p = subprocess.Popen(cmd, shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=lambda: os.close(pipe[1]))
             stdout = ""
             stderr = ""
             fds = [p.stdout, p.stderr]
@@ -325,7 +327,7 @@ class Service(object):
             if len(rcarray) >= 1 and '=' in rcarray[0]:
                 (key, value) = rcarray[0].split("=", 1)
                 if key == self.rcconf_key:
-                    if value == self.rcconf_value:
+                    if value.upper() == self.rcconf_value:
                         # Since the proper entry already exists we can stop iterating.
                         changed = False
                         break
@@ -431,10 +433,10 @@ class LinuxService(Service):
             if check_systemd(self.name):
                 # service is managed by systemd
                 self.enable_cmd = location['systemctl']
-            elif os.path.exists("/etc/init/%s.conf" % self.name):
+            elif location['initctl'] and os.path.exists("/etc/init/%s.conf" % self.name):
                 # service is managed by upstart
                 self.enable_cmd = location['initctl']
-            elif os.path.exists("/etc/init.d/%s" % self.name):
+            elif location['update-rc.d'] and os.path.exists("/etc/init.d/%s" % self.name):
                 # service is managed by with SysV init scripts, but with update-rc.d
                 self.enable_cmd = location['update-rc.d']
             else:
@@ -649,7 +651,7 @@ class LinuxService(Service):
                 return
 
             if self.enable:
-                # make sure the init.d symlinks are created 
+                # make sure the init.d symlinks are created
                 # otherwise enable might not work
                 (rc, out, err) = self.execute_command("%s %s defaults" \
                                                       % (self.enable_cmd, self.name))
@@ -784,7 +786,7 @@ class FreeBsdService(Service):
         else:
             self.rcconf_value = "NO"
 
-        rcfiles = [ '/etc/rc.conf','/usr/local/etc/rc.conf' ]
+        rcfiles = [ '/etc/rc.conf','/etc/rc.conf.local', '/usr/local/etc/rc.conf' ]
         for rcfile in rcfiles:
             if os.path.isfile(rcfile):
                 self.rcconf_file = rcfile

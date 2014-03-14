@@ -129,12 +129,11 @@ def _ensure_virtualenv(module):
     if venv_param is None:
         return
 
-    virtualenv = module.get_bin_path('virtualenv', True)
-
     vbin = os.path.join(os.path.expanduser(venv_param), 'bin')
     activate = os.path.join(vbin, 'activate')
 
     if not os.path.exists(activate):
+        virtualenv = module.get_bin_path('virtualenv', True)
         vcmd = '%s %s' % (virtualenv, venv_param)
         vcmd = [virtualenv, venv_param]
         rc, out_venv, err_venv = module.run_command(vcmd)
@@ -233,7 +232,6 @@ def main():
 
     _ensure_virtualenv(module)
 
-    os.chdir(app_path)
     cmd = "python manage.py %s" % (command, )
 
     if command in noinput_commands:
@@ -252,7 +250,7 @@ def main():
         if module.params[param]:
             cmd = '%s %s' % (cmd, module.params[param])
 
-    rc, out, err = module.run_command(cmd)
+    rc, out, err = module.run_command(cmd, cwd=app_path)
     if rc != 0:
         if command == 'createcachetable' and 'table' in err and 'already exists' in err:
             out = 'Already exists.'
@@ -273,7 +271,7 @@ def main():
     module.exit_json(changed=changed, out=out, cmd=cmd, app_path=app_path, virtualenv=virtualenv,
                      settings=module.params['settings'], pythonpath=module.params['pythonpath'])
 
-# this is magic, see lib/ansible/module_common.py
-#<<INCLUDE_ANSIBLE_MODULE_COMMON>>
+# import module snippets
+from ansible.module_utils.basic import *
 
 main()

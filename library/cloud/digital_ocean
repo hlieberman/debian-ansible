@@ -90,6 +90,7 @@ options:
 
 notes:
   - Two environment variables can be used, DO_CLIENT_ID and DO_API_KEY.
+requirements: [ dopy ]
 '''
 
 
@@ -112,7 +113,7 @@ EXAMPLES = '''
 - digital_ocean: >
       state=present
       command=droplet
-      name=my_new_droplet
+      name=mydroplet
       client_id=XXX
       api_key=XXX
       size_id=1
@@ -131,7 +132,7 @@ EXAMPLES = '''
       state=present
       command=droplet
       id=123
-      name=my_new_droplet
+      name=mydroplet
       client_id=XXX
       api_key=XXX
       size_id=1
@@ -147,7 +148,7 @@ EXAMPLES = '''
 - digital_ocean: >
       state=present
       ssh_key_ids=id1,id2
-      name=my_new_droplet
+      name=mydroplet
       client_id=XXX
       api_key=XXX
       size_id=1
@@ -162,7 +163,7 @@ import time
 try:
     import dopy
     from dopy.manager import DoError, DoManager
-except ImportError as e:
+except ImportError, e:
     print "failed=True msg='dopy >= 0.2.2 required for this module'"
     sys.exit(1)
 
@@ -221,7 +222,7 @@ class Droplet(JsonfyMixIn):
             raise TimeoutError('Wait for droplet running timeout', self.id)
 
     def destroy(self):
-        return self.manager.destroy_droplet(self.id)
+        return self.manager.destroy_droplet(self.id, scrub_data=True)
 
     @classmethod
     def setup(cls, client_id, api_key):
@@ -414,12 +415,12 @@ def main():
 
     try:
         core(module)
-    except TimeoutError as e:
+    except TimeoutError, e:
         module.fail_json(msg=str(e), id=e.id)
-    except (DoError, Exception) as e:
+    except (DoError, Exception), e:
         module.fail_json(msg=str(e))
 
-# this is magic, see lib/ansible/module_common.py
-#<<INCLUDE_ANSIBLE_MODULE_COMMON>>
+# import module snippets
+from ansible.module_utils.basic import *
 
 main()
