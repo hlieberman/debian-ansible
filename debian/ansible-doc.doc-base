@@ -9,7 +9,7 @@ Abstract: Configuration management, deployment, and task execution system
  are transferred to managed machines automatically.
 Section: Programming/Python
 
-Format: HTML
-Index: /usr/share/doc/ansible-doc/html/index.html
-Files: /usr/share/doc/ansible-doc/html/*.html
- /usr/share/doc/ansible-doc/html/man/*.html
+Format: Text
+Index: /usr/share/doc/ansible-doc/html/index.txt
+Files: /usr/share/doc/ansible-doc/html/*.txt
+ /usr/share/doc/ansible-doc/html/man/*.txt
