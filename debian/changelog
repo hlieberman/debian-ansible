@@ -1,19 +1,17 @@
-ansible (1.5.2+dfsg-1) UNRELEASED; urgency=low
+ansible (1.5.3+dfsg-1) UNRELEASED; urgency=low
 
+  [ Harlan Lieberman-Berg ]
   * New upstream version.
   * Update Ansible homepage URL.
   * Add FontAwesome to d/copyright, remove non-existant files.
   * Refresh all patches, removing some related to documentation.
   * Add new dependency on python-crypto.
 
- -- Harlan Lieberman-Berg <H.LiebermanBerg@gmail.com>  Tue, 11 Mar 2014 12:26:33 -0400
-
-ansible (1.4.4+dfsg-2) UNRELASED; urgency=low
-
+  [ Michael Vogt ]
   * add "sshpass" to Suggests
   * add "openssh-client | python-paramiko" to depends
 
- -- Michael Vogt <mvo@debian.org>  Tue, 07 Jan 2014 20:19:51 +0100
+ -- Michael Vogt <michael.vogt@ubuntu.com>  Fri, 14 Mar 2014 14:44:11 +0100
 
 ansible (1.4.4+dfsg-1) unstable; urgency=low
 
