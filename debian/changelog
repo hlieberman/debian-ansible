@@ -1,4 +1,4 @@
-ansible (1.5.3+dfsg-1) UNRELEASED; urgency=low
+ansible (1.5.3+dfsg-1) unstable; urgency=low
 
   [ Harlan Lieberman-Berg ]
   * New upstream version.
@@ -11,7 +11,7 @@ ansible (1.5.3+dfsg-1) UNRELEASED; urgency=low
   * add "sshpass" to Suggests
   * add "openssh-client | python-paramiko" to depends
 
- -- Michael Vogt <mvo@debian.org>  Fri, 14 Mar 2014 14:44:11 +0100
+ -- Michael Vogt <mvo@debian.org>  Tue, 18 Mar 2014 14:33:23 +0100
 
 ansible (1.4.5+dfsg-1) unstable; urgency=medium
 
