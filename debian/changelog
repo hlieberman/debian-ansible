@@ -11,7 +11,13 @@ ansible (1.5.3+dfsg-1) UNRELEASED; urgency=low
   * add "sshpass" to Suggests
   * add "openssh-client | python-paramiko" to depends
 
- -- Michael Vogt <michael.vogt@ubuntu.com>  Fri, 14 Mar 2014 14:44:11 +0100
+ -- Michael Vogt <mvo@debian.org>  Fri, 14 Mar 2014 14:44:11 +0100
+
+ansible (1.4.5+dfsg-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Michael Vogt <mvo@debian.org>  Thu, 20 Feb 2014 08:58:14 +0100
 
 ansible (1.4.4+dfsg-1) unstable; urgency=low
 
