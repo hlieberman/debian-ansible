@@ -99,6 +99,10 @@ Copyright: 2013 Janos Guljas <janos@debian.org>,
  2014, Harlan Lieberman-Berg <H.LiebermanBerg@gmail.com>
 License: GPL-3+
 
+Files: debian/patches/*manpage.patch
+Copyright: 2014, James Cammarata <jimi@sngx.net>
+License: GPL-3+
+
 License: GPL-3+
  Ansible is free software: you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
