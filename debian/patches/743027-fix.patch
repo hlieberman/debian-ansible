@@ -1,0 +1,25 @@
+From 876b8085aa9a0a13de9a2e61a45f2b0ee66f1939 Mon Sep 17 00:00:00 2001
+From: Harlan Lieberman-Berg <hliebermanberg@chitika.com>
+Date: Wed, 2 Apr 2014 17:41:11 -0400
+Subject: [PATCH] Add directory_mode to common file parameters to prevent
+ errors.
+
+---
+ lib/ansible/module_utils/basic.py | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lib/ansible/module_utils/basic.py b/lib/ansible/module_utils/basic.py
+index 9246fd1..6540423 100644
+--- a/lib/ansible/module_utils/basic.py
++++ b/lib/ansible/module_utils/basic.py
+@@ -115,6 +115,7 @@
+     backup = dict(),
+     force = dict(),
+     remote_src = dict(), # used by assemble
++    directory_mode = dict(), # used by copy
+ )
+ 
+ 
+-- 
+1.9.1
+
