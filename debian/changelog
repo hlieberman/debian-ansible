@@ -1,3 +1,10 @@
+ansible (1.5.4+dfsg-1) unstable; urgency=medium
+
+  * Pull missing manpages from upstream development branch.
+  * New upstream version 1.5.4, security update.
+
+ -- Harlan Lieberman-Berg <H.LiebermanBerg@gmail.com>  Tue, 01 Apr 2014 22:00:24 -0400
+
 ansible (1.5.3+dfsg-1) unstable; urgency=low
 
   [ Harlan Lieberman-Berg ]
