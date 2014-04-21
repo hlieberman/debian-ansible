@@ -12,11 +12,9 @@ Fixes #6471
  create mode 100644 docs/man/man1/ansible-vault.1
  create mode 100644 docs/man/man1/ansible-vault.1.asciidoc.in
 
-diff --git a/Makefile b/Makefile
-index 41d80a1..dc2a910 100644
 --- a/Makefile
 +++ b/Makefile
-@@ -20,7 +20,7 @@ OS = $(shell uname -s)
+@@ -20,7 +20,7 @@
  # Manpages are currently built with asciidoc -- would like to move to markdown
  # This doesn't evaluate until it's called. The -D argument is the
  # directory of the target file ($@), kinda like `dirname`.
@@ -25,9 +23,6 @@ index 41d80a1..dc2a910 100644
  ifneq ($(shell which a2x 2>/dev/null),)
  ASCII2MAN = a2x -D $(dir $@) -d manpage -f manpage $<
  ASCII2HTMLMAN = a2x -D docs/html/man/ -d manpage -f xhtml
-diff --git a/docs/man/man1/ansible-vault.1 b/docs/man/man1/ansible-vault.1
-new file mode 100644
-index 0000000..cced9f1
 --- /dev/null
 +++ b/docs/man/man1/ansible-vault.1
 @@ -0,0 +1,103 @@
@@ -134,9 +129,6 @@ index 0000000..cced9f1
 +\fBansible\fR(1), \fBansible\-pull\fR(1), \fBansible\-doc\fR(1)
 +.sp
 +Extensive documentation is available in the documentation site: http://docs\&.ansible\&.com\&. IRC and mailing list info can be found in file CONTRIBUTING\&.md, available in: https://github\&.com/ansible/ansible
-diff --git a/docs/man/man1/ansible-vault.1.asciidoc.in b/docs/man/man1/ansible-vault.1.asciidoc.in
-new file mode 100644
-index 0000000..daccd87
 --- /dev/null
 +++ b/docs/man/man1/ansible-vault.1.asciidoc.in
 @@ -0,0 +1,126 @@
@@ -266,6 +258,3 @@ index 0000000..daccd87
 +Extensive documentation is available in the documentation site:
 +<http://docs.ansible.com>. IRC and mailing list info can be found
 +in file CONTRIBUTING.md, available in: <https://github.com/ansible/ansible>
--- 
-1.9.1
-

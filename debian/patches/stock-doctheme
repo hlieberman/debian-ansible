@@ -1,7 +1,8 @@
-Index: ansible/docsite/conf.py
-===================================================================
---- ansible.orig/docsite/conf.py	2014-03-18 11:38:53.192671346 +0100
-+++ ansible/docsite/conf.py	2014-03-18 11:39:00.868671521 +0100
+Description: Make sure we generate documentation in a useful way
+Author: Harlan Lieberman-Berg <H.LiebermanBerg@gmail.com>
+Forwarded: not-needed
+--- a/docsite/conf.py
++++ b/docsite/conf.py
 @@ -104,8 +104,8 @@
  # Options for HTML output
  # -----------------------

@@ -8,11 +8,9 @@ Subject: [PATCH] Add directory_mode to common file parameters to prevent
  lib/ansible/module_utils/basic.py | 1 +
  1 file changed, 1 insertion(+)
 
-diff --git a/lib/ansible/module_utils/basic.py b/lib/ansible/module_utils/basic.py
-index 9246fd1..6540423 100644
 --- a/lib/ansible/module_utils/basic.py
 +++ b/lib/ansible/module_utils/basic.py
-@@ -115,6 +115,7 @@
+@@ -113,6 +113,7 @@
      backup = dict(),
      force = dict(),
      remote_src = dict(), # used by assemble
@@ -20,6 +18,3 @@ index 9246fd1..6540423 100644
  )
  
  
--- 
-1.9.1
-
