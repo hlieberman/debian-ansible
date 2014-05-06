@@ -58,6 +58,12 @@ options:
         default: none
         description:
             - url to retrieve key from.
+    keyserver:
+        version_added: "1.6"
+        required: false
+        default: none
+        description:
+            - keyserver to retrieve key from.
     state:
         required: false
         choices: [ absent, present ]
@@ -112,13 +118,13 @@ REQUIRED_EXECUTABLES=['gpg', 'grep', 'apt-key']
 def check_missing_binaries(module):
     missing = [e for e in REQUIRED_EXECUTABLES if not find_executable(e)]
     if len(missing):
-        module.fail_json(msg="binaries are missing", names=all)
+        module.fail_json(msg="binaries are missing", names=missing)
 
-def all_keys(module, keyring):
+def all_keys(module, keyring, short_format):
     if keyring:
-        cmd = "apt-key --keyring %s list" % keyring
+        cmd = "apt-key --keyring %s adv --list-public-keys --keyid-format=long" % keyring
     else:
-        cmd = "apt-key list"
+        cmd = "apt-key adv --list-public-keys --keyid-format=long"
     (rc, out, err) = module.run_command(cmd)
     results = []
     lines = out.split('\n')
@@ -128,11 +134,19 @@ def all_keys(module, keyring):
             code = tokens[1]
             (len_type, real_code) = code.split("/")
             results.append(real_code)
+    if short_format:
+        results = shorten_key_ids(results)
     return results
 
-def key_present(module, key_id):
-    (rc, out, err) = module.run_command("apt-key list | 2>&1 grep -i -q %s" % pipes.quote(key_id), use_unsafe_shell=True)
-    return rc == 0
+def shorten_key_ids(key_id_list):
+    """
+    Takes a list of key ids, and converts them to the 'short' format,
+    by reducing them to their last 8 characters.
+    """
+    short = []
+    for key in key_id_list:
+        short.append(key[-8:])
+    return short
 
 def download_key(module, url):
     # FIXME: move get_url code to common, allow for in-memory D/L, support proxies
@@ -143,8 +157,12 @@ def download_key(module, url):
         rsp, info = fetch_url(module, url)
         return rsp.read()
     except Exception:
-        module.fail_json(msg="error getting key id from url", traceback=format_exc())
+        module.fail_json(msg="error getting key id from url: %s" % url, traceback=format_exc())
 
+def import_key(module, keyserver, key_id):
+    cmd = "apt-key adv --keyserver %s --recv %s" % (keyserver, key_id)
+    (rc, out, err) = module.run_command(cmd, check_rc=True)
+    return True
 
 def add_key(module, keyfile, keyring, data=None):
     if data is not None:
@@ -179,8 +197,9 @@ def main():
             file=dict(required=False),
             key=dict(required=False),
             keyring=dict(required=False),
-            state=dict(required=False, choices=['present', 'absent'], default='present'),
             validate_certs=dict(default='yes', type='bool'),
+            keyserver=dict(required=False),
+            state=dict(required=False, choices=['present', 'absent'], default='present')
         ),
         supports_check_mode=True
     )
@@ -191,6 +210,7 @@ def main():
     filename        = module.params['file']
     keyring         = module.params['keyring']
     state           = module.params['state']
+    keyserver       = module.params['keyserver']
     changed         = False
 
     if key_id:
@@ -198,20 +218,22 @@ def main():
             _ = int(key_id, 16)
             if key_id.startswith('0x'):
                 key_id = key_id[2:]
+            key_id = key_id.upper()
         except ValueError:
-            module.fail_json("Invalid key_id")
+            module.fail_json(msg="Invalid key_id", id=key_id)
 
     # FIXME: I think we have a common facility for this, if not, want
     check_missing_binaries(module)
 
-    keys = all_keys(module, keyring)
+    short_format = (key_id is not None and len(key_id) == 8)
+    keys = all_keys(module, keyring, short_format)
     return_values = {}
 
     if state == 'present':
         if key_id and key_id in keys:
             module.exit_json(changed=False)
         else:
-            if not filename and not data:
+            if not filename and not data and not keyserver:
                 data = download_key(module, url)
             if key_id and key_id in keys:
                 module.exit_json(changed=False)
@@ -220,10 +242,12 @@ def main():
                     module.exit_json(changed=True)
                 if filename:
                     add_key(module, filename, keyring)
+                elif keyserver:
+                    import_key(module, keyserver, key_id)
                 else:
                     add_key(module, "-", keyring, data)
                 changed=False
-                keys2 = all_keys(module, keyring)
+                keys2 = all_keys(module, keyring, short_format)
                 if len(keys) != len(keys2):
                     changed=True
                 if key_id and not key_id in keys2:

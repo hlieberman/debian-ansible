@@ -1,6 +1,84 @@
 Ansible Changes By Release
 ==========================
 
+## 1.6 "And the Cradle Will Rock" - Active Development
+
+Major features/changes:
+
+* The deprecated legacy variable templating system has been finally removed.  Use {{ foo }} always not $foo or ${foo}.
+* Any data file can also be JSON.  Use sparingly -- with great power comes great responsibility.  Starting file with "{" or "[" denotes JSON.
+* Added 'gathering' param for ansible.cfg to change the default gather_facts policy.
+* Accelerate improvements:
+  - multiple users can connect with different keys, when `accelerate_multi_key = yes` is specified in the ansible.cfg.
+  - daemon lifetime is now based on the time from the last activity, not the time from the daemon's launch.
+* ansible-playbook now accepts --force-handlers to run handlers even if tasks result in failures.
+* Added VMWare support with the vsphere_guest module.
+
+New Modules:
+
+* files: replace
+* packaging: cpanm (Perl)
+* packaging: portage
+* packaging: composer (PHP)
+* packaging: homebrew_tap (OS X)
+* packaging: homebrew_cask (OS X) 
+* packaging: apt_rpm
+* packaging: layman
+* monitoring: logentries
+* monitoring: rollbar_deployment
+* monitoring: librato_annotation
+* notification: nexmo (SMS)
+* notification: twilio (SMS)
+* notification: slack (Slack.com)
+* notification: typetalk (Typetalk.in)
+* notification: sns (Amazon)
+* system: debconf
+* system: ufw
+* system: locale_gen
+* system: alternatives
+* system: capabilities
+* net_infrastructure: bigip_facts
+* net_infrastructure: dnssimple
+* net_infrastructure: lldp
+* web_infrastructure: apache2_module
+* cloud: digital_ocean_domain
+* cloud: digital_ocean_sshkey 
+* cloud: rax_identity
+* cloud: rax_cbs (cloud block storage)
+* cloud: rax_cbs_attachments
+* cloud: ec2_asg (configure autoscaling groups)
+* cloud: ec2_scaling_policy
+* cloud: ec2_metric_alarm
+* cloud: vsphere_guest
+
+Other notable changes:
+
+* example callback plugin added for hipchat
+* added example inventory plugin for vcenter/vsphere
+* added example inventory plugin for doing really trivial inventory from SSH config files
+* libvirt module now supports destroyed and paused as states
+* s3 module can specify metadata
+* security token additions to ec2 modules
+* setup module code moved into module_utils/, facts now accessible by other modules  
+* synchronize module sets relative dirs based on inventory or role path
+* misc bugfixes and other parameters
+* the ec2_key module now has wait/wait_timeout parameters
+* added version_compare filter (see docs)
+* added ability for module documentation YAML to utilize shared module snippets for common args
+* apt module now accepts "deb" parameter to install local dpkg files
+* regex_replace filter plugin added
+* added an inventory script for Docker
+* added an inventory script for Abiquo
+* the get_url module now accepts url_username and url_password as parameters, so sites which require
+  authentication no longer need to have them embedded in the url
+* ... to be filled in from changelogs ...
+* 
+
+## 1.5.5 "Love Walks In" - April 18, 2014
+
+- Security fix for vault, to ensure the umask is set to a restrictive mode before creating/editing vault files.
+- Backported apt_repository security fixes relating to filename/mode upon sources list file creation.
+
 ## 1.5.4 "Love Walks In" - April 1, 2014
 
 - Security fix for safe_eval, which further hardens the checking of the evaluation function.
@@ -41,6 +119,7 @@ Major features/changes:
 * Start of new integration test infrastructure (WIP, more details TBD)
 * if repoquery is unavailble, the yum module will automatically attempt to install yum-utils
 * ansible-vault: a framework for encrypting your playbooks and variable files 
+* added support for privilege escalation via 'su' into bin/ansible and bin/ansible-playbook and associated keywords 'su', 'su_user', 'su_pass' for tasks/plays
 
 New modules:
 
@@ -86,7 +165,6 @@ Other notable changes (many new module params & bugfixes may not not listed):
 * md5 logic improved during sudo operation
 * support for ed25519 keys in authorized_key module
 * ability to set directory permissions during a recursive copy (directory_mode parameter)
-* update docker module, support for using docker python library 0.3.0
 
 ## 1.4.5 "Could This Be Magic" - February 12, 2014
 

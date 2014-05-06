@@ -19,6 +19,7 @@
 # installs ansible and sets it up to run on cron.
 
 import os
+import shlex
 import shutil
 import tempfile
 from io import BytesIO
@@ -113,7 +114,6 @@ class VaultLib(object):
         # clean out header
         data = self._split_header(data)
 
-
         # create the cipher object
         if 'Vault' + self.cipher_name in globals() and self.cipher_name in CIPHER_WHITELIST: 
             cipher = globals()['Vault' + self.cipher_name]
@@ -123,6 +123,8 @@ class VaultLib(object):
 
         # try to unencrypt data
         data = this_cipher.decrypt(data, self.password)
+        if data is None:
+            raise errors.AnsibleError("Decryption failed")
 
         return data            
 
@@ -189,13 +191,14 @@ class VaultEditor(object):
             raise errors.AnsibleError("%s exists, please use 'edit' instead" % self.filename)
 
         # drop the user into vim on file
-        EDITOR = os.environ.get('EDITOR','vim')
-        call([EDITOR, self.filename])
+        old_umask = os.umask(0077)
+        call(self._editor_shell_command(self.filename))
         tmpdata = self.read_data(self.filename)
         this_vault = VaultLib(self.password)
         this_vault.cipher_name = self.cipher_name
         enc_data = this_vault.encrypt(tmpdata)
         self.write_data(enc_data, self.filename)
+        os.umask(old_umask)
 
     def decrypt_file(self):
 
@@ -209,7 +212,10 @@ class VaultEditor(object):
         this_vault = VaultLib(self.password)
         if this_vault.is_encrypted(tmpdata):
             dec_data = this_vault.decrypt(tmpdata)
-            self.write_data(dec_data, self.filename)
+            if dec_data is None:
+                raise errors.AnsibleError("Decryption failed")
+            else:
+                self.write_data(dec_data, self.filename)
         else:
             raise errors.AnsibleError("%s is not encrypted" % self.filename)
 
@@ -217,6 +223,9 @@ class VaultEditor(object):
 
         if not HAS_AES or not HAS_COUNTER or not HAS_PBKDF2 or not HAS_HASH:
             raise errors.AnsibleError(CRYPTO_UPGRADE)
+
+        # make sure the umask is set to a sane value
+        old_mask = os.umask(0077)
 
         # decrypt to tmpfile
         tmpdata = self.read_data(self.filename)
@@ -226,8 +235,7 @@ class VaultEditor(object):
         self.write_data(dec_data, tmp_path)
 
         # drop the user into vim on the tmp file
-        EDITOR = os.environ.get('EDITOR','vim')
-        call([EDITOR, tmp_path])
+        call(self._editor_shell_command(tmp_path))
         new_data = self.read_data(tmp_path)
 
         # create new vault
@@ -242,6 +250,9 @@ class VaultEditor(object):
 
         # shuffle tmp file into place
         self.shuffle_files(tmp_path, self.filename)
+
+        # and restore the old umask
+        os.umask(old_mask)
 
     def encrypt_file(self):
 
@@ -298,6 +309,13 @@ class VaultEditor(object):
         if os.path.isfile(dest):
             os.remove(dest)
         shutil.move(src, dest)
+
+    def _editor_shell_command(self, filename):
+        EDITOR = os.environ.get('EDITOR','vim')
+        editor = shlex.split(EDITOR)
+        editor.append(filename)
+
+        return editor
 
 ########################################
 #               CIPHERS                #
@@ -441,7 +459,6 @@ class VaultAES256(object):
         derivedkey = PBKDF2(password, salt, dkLen=(2 * keylength) + ivlength, 
                             count=10000, prf=pbkdf2_prf)
 
-        #import epdb; epdb.st()
         key1 = derivedkey[:keylength]
         key2 = derivedkey[keylength:(keylength * 2)]
         iv = derivedkey[(keylength * 2):(keylength * 2) + ivlength]
