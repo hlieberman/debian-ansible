@@ -1,7 +1,21 @@
 Ansible Releases at a Glance
 ============================
 
-1.6    "The Cradle Will Rock" - NEXT
+Future
+++++++
+
+1.7    "Summer Nights" -------- SUMMER 2014
+
+Active Development
+++++++++++++++++++
+
+1.6    "The Cradle Will Rock" - CURRENT DEVEL BRANCH 
+
+Previous
+++++++++
+
+=======
+1.6    "The Cradle Will Rock" - NEXT 
 1.5.5  "Love Walks In" -------- 04-18-2014
 1.5.4  "Love Walks In" -------- 04-01-2014
 1.5.3  "Love Walks In" -------- 03-13-2014

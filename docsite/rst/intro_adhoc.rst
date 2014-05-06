@@ -123,7 +123,7 @@ File Transfer
 
 Here's another use case for the `/usr/bin/ansible` command line.  Ansible can SCP lots of files to multiple machines in parallel.
 
-To transfer a file directly to many different servers::
+To transfer a file directly to many servers::
 
     $ ansible atlanta -m copy -a "src=/etc/hosts dest=/tmp/hosts"
 
@@ -248,7 +248,7 @@ Be sure to use a high enough ``--forks`` value if you want to get all of your jo
 very quickly. After the time limit (in seconds) runs out (``-B``), the process on
 the remote nodes will be terminated.
 
-Typically you'll be only be backgrounding long-running
+Typically you'll only be backgrounding long-running
 shell commands or software upgrades only.  Backgrounding the copy module does not do a background file transfer.  :doc:`Playbooks <playbooks>` also support polling, and have a simplified syntax for this.
 
 .. _checking_facts:
