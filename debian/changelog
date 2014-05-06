@@ -1,8 +1,19 @@
+ansible (1.6.0+dfsg-1) unstable; urgency=medium
+
+  * New upstream version.
+  * Remove patches applied upstream.
+  * Fix manpage warning.
+
+ -- Harlan Lieberman-Berg <H.LiebermanBerg@gmail.com>  Tue, 06 May 2014 03:07:30 +0000
+
 ansible (1.5.5+dfsg-1) unstable; urgency=medium
 
+  [ Harlan Lieberman-Berg ]
   * New upstream version 1.5.5, security update.
   * d/control: Add myself to Uploaders to silence Lintian
   * Refresh patches for new version.  Add DEP-3 headers to one patch.
+
+  [ root ]
 
  -- Harlan Lieberman-Berg <H.LiebermanBerg@gmail.com>  Mon, 21 Apr 2014 16:51:47 -0400
 
