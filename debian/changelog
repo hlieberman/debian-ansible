@@ -1,3 +1,9 @@
+ansible (1.6.1+dfsg-1) unstable; urgency=medium
+
+  * New upstream version.
+
+ -- Harlan Lieberman-Berg <H.LiebermanBerg@gmail.com>  Wed, 07 May 2014 18:49:07 +0000
+
 ansible (1.6.0+dfsg-1) unstable; urgency=medium
 
   * New upstream version.
