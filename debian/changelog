@@ -1,3 +1,11 @@
+ansible (1.6.2+dfsg-1) unstable; urgency=medium
+
+  * New upstream version.
+  * Packaged version from tip of upstream branch release1.6.2 instead of
+    tagged version, as it contains a fix needed to prevent FTBFS.
+
+ -- Harlan Lieberman-Berg <H.LiebermanBerg@gmail.com>  Sun, 25 May 2014 17:50:03 +0000
+
 ansible (1.6.1+dfsg-1) unstable; urgency=medium
 
   * New upstream version.
