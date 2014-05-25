@@ -566,11 +566,14 @@ class Runner(object):
 
         # merge the VARS and SETUP caches for this host
         combined_cache = self.setup_cache.copy()
-        combined_cache.get(host, {}).update(self.vars_cache.get(host, {}))
+        combined_cache.setdefault(host, {}).update(self.vars_cache.get(host, {}))
         hostvars = HostVars(combined_cache, self.inventory, vault_password=self.vault_pass)
 
         # use combined_cache and host_variables to template the module_vars
+        # we update the inject variables with the data we're about to template
+        # since some of the variables we'll be replacing may be contained there too
         module_vars_inject = utils.combine_vars(combined_cache.get(host, {}), host_variables)
+        module_vars_inject.update(self.module_vars)
         module_vars = template.template(self.basedir, self.module_vars, module_vars_inject)
 
         inject = {}
@@ -890,7 +893,7 @@ class Runner(object):
                 if (module_name == 'async_status' and "finished" in data) or module_name != 'async_status':
                     if changed_when is not None and 'skipped' not in data:
                         data['changed'] = utils.check_conditional(changed_when, self.basedir, inject, fail_on_undefined=self.error_on_undefined_vars)
-                    if failed_when is not None:
+                    if failed_when is not None and 'skipped' not in data:
                         data['failed_when_result'] = data['failed'] = utils.check_conditional(failed_when, self.basedir, inject, fail_on_undefined=self.error_on_undefined_vars)
 
             if is_chained:
