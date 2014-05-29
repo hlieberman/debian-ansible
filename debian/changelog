@@ -1,5 +1,9 @@
 ansible (1.6.2+dfsg-1) unstable; urgency=medium
 
+  [ Felix Geyer ]
+  * Run upstream build tests during the build. (Closes: #749406)
+
+  [ Harlan Lieberman-Berg ]
   * New upstream version.
   * Packaged version from tip of upstream branch release1.6.2 instead of
     tagged version, as it contains a fix needed to prevent FTBFS.

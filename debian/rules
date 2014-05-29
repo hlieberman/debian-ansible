@@ -19,6 +19,9 @@ override_dh_auto_build:
 	# man pages for the "man3" section
 	make docs
 
+override_dh_auto_test:
+	make tests
+
 override_dh_auto_clean:
 	# sphinx auto-build stuff
 	rm -rf html docs/man/man3/*.3

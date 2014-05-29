@@ -5,7 +5,8 @@ Maintainer: Janos Guljas <janos@debian.org>
 Uploaders: Michael Vogt <mvo@debian.org>,
  Harlan Lieberman-Berg <H.LiebermanBerg@gmail.com>
 Build-Depends: debhelper (>= 9), python-all, python-crypto, 
- python-setuptools, python-sphinx, python-yaml, asciidoc
+ python-setuptools, python-sphinx, python-yaml, asciidoc,
+ python-nose, python-passlib
 Standards-Version: 3.9.5
 Homepage: http://ansible.com
 Vcs-Git: git://anonscm.debian.org/collab-maint/ansible.git
