@@ -1022,6 +1022,18 @@ class AnsibleModule(object):
         creating = not os.path.exists(dest)
 
         try:
+            login_name = os.getlogin()
+        except OSError:
+            # not having a tty can cause the above to fail, so
+            # just get the LOGNAME environment variable instead
+            login_name = os.environ.get('LOGNAME', None)
+
+        # if the original login_name doesn't match the currently
+        # logged-in user, or if the SUDO_USER environment variable
+        # is set, then this user has switched their credentials
+        switched_user = login_name and login_name != pwd.getpwuid(os.getuid())[0] or os.environ.get('SUDO_USER')
+
+        try:
             # Optimistically try a rename, solves some corner cases and can avoid useless work, throws exception if not atomic.
             os.rename(src, dest)
         except (IOError,OSError), e:
@@ -1035,7 +1047,7 @@ class AnsibleModule(object):
                 prefix=".ansible_tmp", dir=dest_dir, suffix=dest_file)
 
             try: # leaves tmp file behind when sudo and  not root
-                if os.getenv("SUDO_USER") and os.getuid() != 0:
+                if switched_user and os.getuid() != 0:
                     # cleanup will happen by 'rm' of tempdir
                     # copy2 will preserve some metadata
                     shutil.copy2(src, tmp_dest.name)
@@ -1058,7 +1070,7 @@ class AnsibleModule(object):
             umask = os.umask(0)
             os.umask(umask)
             os.chmod(dest, 0666 ^ umask)
-            if os.getenv("SUDO_USER"):
+            if switched_user:
                 os.chown(dest, os.getuid(), os.getgid())
 
         if self.selinux_enabled():

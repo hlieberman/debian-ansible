@@ -182,11 +182,13 @@ def main():
 
     elif state in ['link','hard']:
 
-        absrc = src
-        if not os.path.isabs(absrc):
-            absrc = os.path.abspath(src)
+        if os.path.isdir(path) and not os.path.islink(path):
+            relpath = path
+        else:
+            relpath = os.path.dirname(path)
 
-        if not os.path.exists(absrc) and not force:
+        absrc = os.path.normpath('%s/%s' % (relpath, os.path.basename(src)))
+        if not os.path.exists(src) and not os.path.exists(absrc) and not force:
             module.fail_json(path=path, src=src, msg='src file does not exist, use "force=yes" if you really want to create the link: %s' % absrc)
 
         if state == 'hard':

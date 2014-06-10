@@ -257,6 +257,10 @@ class PlayBook(object):
                     elif isinstance(p['vars'], list):
                         # nobody should really do this, but handle vars: a=1 b=2
                         p['vars'].extend([{k:v} for k,v in play_vars.iteritems()])
+                    elif p['vars'] == None:
+                        # someone specified an empty 'vars:', so reset
+                        # it to the vars we currently have
+                        p['vars'] = play_vars.copy()
                     # now add in the vars_files
                     p['vars_files'] = utils.list_union(p.get('vars_files', []), play_vars_files)
 
@@ -355,7 +359,7 @@ class PlayBook(object):
     def _run_task_internal(self, task):
         ''' run a particular module step in a playbook '''
 
-        hosts = self._trim_unavailable_hosts(task.play._play_hosts)
+        hosts = self._trim_unavailable_hosts(self.inventory.list_hosts(task.play._play_hosts))
         self.inventory.restrict_to(hosts)
 
         runner = ansible.runner.Runner(
